@@ -1,0 +1,85 @@
+{% extends "_shell.html" %}
+{% block title %}Confirm Sub-Account — Demo Credit Union{% endblock %}
+{% block body %}
+<table width="700" border="0" cellpadding="0" cellspacing="0" class="c2" bgcolor="#ffffff">
+<tr class="row1">
+  <td class="c1" bgcolor="#00335f">
+    <table width="100%" border="0" cellpadding="6" cellspacing="0" class="c1">
+    <tr class="row1">
+      <td class="c1" align="left" nowrap>
+        <font face="Verdana,Arial" size="2" color="#ffffff"><b>Confirm Sub-Account</b></font>
+      </td>
+      <td class="c2" align="right" nowrap>
+        <font face="Verdana,Arial" size="1" color="#b9c8d8">Step 2 of 2</font>
+      </td>
+    </tr>
+    </table>
+  </td>
+</tr>
+<tr class="row2">
+  <td class="c2">
+    <table width="100%" border="0" cellpadding="7" cellspacing="0" class="c1">
+    <tr class="row1">
+      <td class="c1" bgcolor="#fff6d8">
+        <font face="Verdana,Arial" size="2">
+          <b>Review before submitting.</b> Accepting this screen opens the account
+          immediately. Sub-account creation cannot be reversed from this terminal.
+        </font>
+      </td>
+    </tr>
+    </table>
+
+    <table width="100%" border="0" cellpadding="6" cellspacing="1" class="c2" bgcolor="#b8b8b8">
+    <tr class="row1" bgcolor="#eef2f6">
+      <td class="c1" width="180" align="right" nowrap><font face="Verdana,Arial" size="2">Member</font></td>
+      <td class="c2" bgcolor="#ffffff"><font face="Verdana,Arial" size="2">{{ m.name }} ({{ m.id }})</font></td>
+    </tr>
+    <tr class="row2" bgcolor="#eef2f6">
+      <td class="c1" align="right" nowrap><font face="Verdana,Arial" size="2">Account type</font></td>
+      <td class="c2" bgcolor="#ffffff"><font face="Verdana,Arial" size="2">{{ form.acct_type }}</font></td>
+    </tr>
+    <tr class="row1" bgcolor="#eef2f6">
+      <td class="c1" align="right" nowrap><font face="Verdana,Arial" size="2">Account nickname</font></td>
+      <td class="c2" bgcolor="#ffffff"><font face="Verdana,Arial" size="2">{{ form.nickname }}</font></td>
+    </tr>
+    <tr class="row2" bgcolor="#eef2f6">
+      <td class="c1" align="right" nowrap><font face="Verdana,Arial" size="2">Initial deposit</font></td>
+      <td class="c2" bgcolor="#ffffff"><font face="Verdana,Arial" size="2">{{ form.deposit }}</font></td>
+    </tr>
+    <tr class="row1" bgcolor="#eef2f6">
+      <td class="c1" align="right" nowrap><font face="Verdana,Arial" size="2">Funding source</font></td>
+      <td class="c2" bgcolor="#ffffff"><font face="Verdana,Arial" size="2">{{ form.funding }}</font></td>
+    </tr>
+    <tr class="row2" bgcolor="#eef2f6">
+      <td class="c1" align="right" nowrap><font face="Verdana,Arial" size="2">Statement delivery</font></td>
+      <td class="c2" bgcolor="#ffffff"><font face="Verdana,Arial" size="2">{{ form.statements }}</font></td>
+    </tr>
+    <tr class="row1" bgcolor="#eef2f6">
+      <td class="c1" align="right" nowrap><font face="Verdana,Arial" size="2">Overdraft link</font></td>
+      <td class="c2" bgcolor="#ffffff">
+        <font face="Verdana,Arial" size="2">{% if form.overdraft %}Linked to primary savings{% else %}Not linked{% endif %}</font>
+      </td>
+    </tr>
+    </table>
+
+    <table width="100%" border="0" cellpadding="8" cellspacing="0" class="c1">
+    <tr class="row2">
+      <td class="c2" bgcolor="#efefef" align="left" nowrap>
+        <form method="post" action="/member/{{ m.id }}/sub-account/confirm">
+          <input type="hidden" name="ddlActType" value="{{ form.acct_type }}">
+          <input type="hidden" name="txtNick" value="{{ form.nickname }}">
+          <input type="hidden" name="txtDep" value="{{ form.deposit }}">
+          <input type="hidden" name="ddlFund" value="{{ form.funding }}">
+          <input type="hidden" name="rdoStmt" value="{{ form.statements }}">
+          {% if form.overdraft %}<input type="hidden" name="chkOd" value="Y">{% endif %}
+          <input type="submit" value="Confirm and Open Account">
+          &nbsp;&nbsp;
+          <a href="/member/{{ m.id }}/sub-account/new"><font face="Verdana,Arial" size="2" color="#00335f">Go Back</font></a>
+        </form>
+      </td>
+    </tr>
+    </table>
+  </td>
+</tr>
+</table>
+{% endblock %}

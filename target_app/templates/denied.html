@@ -1,0 +1,51 @@
+{% extends "_shell.html" %}
+{% block title %}Access Restricted — Demo Credit Union{% endblock %}
+{% block body %}
+<table width="620" border="0" cellpadding="0" cellspacing="0" class="c1" bgcolor="#ffffff">
+<tr class="row1">
+  <td class="c1" bgcolor="#8a1a1a">
+    <table width="100%" border="0" cellpadding="6" cellspacing="0" class="c2">
+    <tr class="row1">
+      <td class="c1"><font face="Verdana,Arial" size="2" color="#ffffff"><b>Access Restricted</b></font></td>
+    </tr>
+    </table>
+  </td>
+</tr>
+<tr class="row2">
+  <td class="c2">
+    <table width="100%" border="0" cellpadding="8" cellspacing="0" class="c1">
+    <tr class="row1">
+      <td class="c1">
+        <font face="Verdana,Arial" size="2">
+          <b>Member outside your region.</b>
+        </font>
+      </td>
+    </tr>
+    <tr class="row2">
+      <td class="c2">
+        <font face="Verdana,Arial" size="2">
+          Member {{ member_id }} is serviced by the {{ member_region }} region. Your operator
+          profile is scoped to the {{ operator_region }} region, so this record cannot be
+          displayed here.
+        </font>
+      </td>
+    </tr>
+    <tr class="row1">
+      <td class="c1">
+        <font face="Verdana,Arial" size="1" color="#444444">
+          A regional supervisor can raise a cross-region view request on form CU-118.
+        </font>
+      </td>
+    </tr>
+    <tr class="row2">
+      <td class="c2" bgcolor="#efefef">
+        <font face="Verdana,Arial" size="2">
+          <a href="/search"><font size="2" color="#00335f">Return to Member Lookup</font></a>
+        </font>
+      </td>
+    </tr>
+    </table>
+  </td>
+</tr>
+</table>
+{% endblock %}

@@ -1,0 +1,82 @@
+{% extends "_shell.html" %}
+{% block title %}Member Profile — Demo Credit Union{% endblock %}
+{% block body %}
+<table width="760" border="0" cellpadding="0" cellspacing="0" class="c2" bgcolor="#ffffff">
+<tr class="row1">
+  <td class="c1" bgcolor="#00335f">
+    <table width="100%" border="0" cellpadding="6" cellspacing="0" class="c1">
+    <tr class="row1">
+      <td class="c1" align="left" nowrap>
+        <font face="Verdana,Arial" size="2" color="#ffffff"><b>Member Profile</b></font>
+      </td>
+      <td class="c2" align="right" nowrap>
+        <font face="Verdana,Arial" size="1" color="#b9c8d8">Record {{ m.id }}&nbsp;/&nbsp;status ACTIVE</font>
+      </td>
+    </tr>
+    </table>
+  </td>
+</tr>
+
+<tr class="row2">
+  <td class="c2">
+    <table width="100%" border="0" cellpadding="6" cellspacing="1" class="c1" bgcolor="#b8b8b8">
+    <tr class="row1" bgcolor="#eef2f6">
+      <td class="c1" width="130" align="right" nowrap><font face="Verdana,Arial" size="2">Member name</font></td>
+      <td class="c2" width="250" bgcolor="#ffffff"><font face="Verdana,Arial" size="2"><b>{{ m.name }}</b></font></td>
+      <td class="c1" width="130" align="right" nowrap><font face="Verdana,Arial" size="2">Member number</font></td>
+      <td class="c2" bgcolor="#ffffff"><font face="Verdana,Arial" size="2">{{ m.id }}</font></td>
+    </tr>
+    <tr class="row2" bgcolor="#eef2f6">
+      <td class="c1" align="right" nowrap><font face="Verdana,Arial" size="2">Age</font></td>
+      <td class="c2" bgcolor="#ffffff"><font face="Verdana,Arial" size="2">{{ m.age }}</font></td>
+      <td class="c1" align="right" nowrap><font face="Verdana,Arial" size="2">Region</font></td>
+      <td class="c2" bgcolor="#ffffff"><font face="Verdana,Arial" size="2">{{ m.region }}</font></td>
+    </tr>
+    <tr class="row1" bgcolor="#eef2f6">
+      <td class="c1" align="right" nowrap><font face="Verdana,Arial" size="2">Savings balance</font></td>
+      <td class="c2" bgcolor="#ffffff"><font face="Verdana,Arial" size="2"><b>{{ m.savings_balance|money }}</b></font></td>
+      <td class="c1" align="right" nowrap><font face="Verdana,Arial" size="2">Credit score</font></td>
+      <td class="c2" bgcolor="#ffffff"><font face="Verdana,Arial" size="2">{{ m.credit_score }}</font></td>
+    </tr>
+    </table>
+  </td>
+</tr>
+
+<tr class="row1">
+  <td class="c1">
+    <table width="100%" border="0" cellpadding="6" cellspacing="0" class="c2">
+    <tr class="row2">
+      <td class="c1">
+        <font face="Verdana,Arial" size="1" color="#444444"><b>Lending summary</b> (loan servicing subsystem)</font>
+      </td>
+    </tr>
+    <tr class="row1">
+      <td class="c1">
+        {# Served from a separate subsystem, embedded the way 2003 did it. #}
+        <iframe src="/member/{{ m.id }}/loan-frame" width="520" height="128" frameborder="1" scrolling="no"></iframe>
+      </td>
+    </tr>
+    </table>
+  </td>
+</tr>
+
+<tr class="row2">
+  <td class="c2" bgcolor="#efefef">
+    <table width="100%" border="0" cellpadding="6" cellspacing="0" class="c1">
+    <tr class="row1">
+      <td class="c1" align="left" nowrap>
+        <font face="Verdana,Arial" size="2">
+          <a href="/member/{{ m.id }}/sub-account/new"><font size="2" color="#00335f">Open Sub-Account</font></a>
+          &nbsp;&nbsp;
+          <a href="/search"><font size="2" color="#00335f">New Lookup</font></a>
+        </font>
+      </td>
+      <td class="c2" align="right" nowrap>
+        <font face="Verdana,Arial" size="1" color="#777777">Viewed by {{ operator_name }}</font>
+      </td>
+    </tr>
+    </table>
+  </td>
+</tr>
+</table>
+{% endblock %}

@@ -1,0 +1,55 @@
+{% extends "_shell.html" %}
+{% block title %}Member Lookup — Demo Credit Union{% endblock %}
+{% block body %}
+<table width="640" border="0" cellpadding="0" cellspacing="0" class="c1" bgcolor="#ffffff">
+<tr class="row1">
+  <td class="c1" bgcolor="#00335f">
+    <table width="100%" border="0" cellpadding="6" cellspacing="0" class="c2">
+    <tr class="row1">
+      <td class="c1"><font face="Verdana,Arial" size="2" color="#ffffff"><b>Member Lookup</b></font></td>
+    </tr>
+    </table>
+  </td>
+</tr>
+<tr class="row2">
+  <td class="c2">
+    <table width="100%" border="0" cellpadding="8" cellspacing="0" class="c1">
+    <tr class="row1">
+      <td class="c1" colspan="2">
+        <font face="Verdana,Arial" size="1" color="#444444">
+          Enter the five digit member number exactly as printed on the passbook.
+        </font>
+      </td>
+    </tr>
+    <form method="get" action="/search">
+    <tr class="row2">
+      <td class="c1" width="150" align="right" nowrap>
+        <font face="Verdana,Arial" size="2">Member number</font>
+      </td>
+      <td class="c2">
+        <input type="text" name="txtMbr" size="14" maxlength="5" value="{{ entered }}">
+        &nbsp;
+        <input type="submit" value="Look Up">
+      </td>
+    </tr>
+    </form>
+    {% if error %}
+    <tr class="row1">
+      <td class="c1">&nbsp;</td>
+      <td class="c2" bgcolor="#ffe8e8">
+        <font face="Verdana,Arial" size="2" color="#a00000"><b>{{ error }}</b></font>
+      </td>
+    </tr>
+    {% endif %}
+    <tr class="row2">
+      <td class="c1" colspan="2">
+        <font face="Verdana,Arial" size="1" color="#777777">
+          Lookups are limited to members in your assigned region ({{ operator_region }}).
+        </font>
+      </td>
+    </tr>
+    </table>
+  </td>
+</tr>
+</table>
+{% endblock %}

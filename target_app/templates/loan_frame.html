@@ -1,0 +1,32 @@
+{# Frame document. Standalone page, not wrapped in the shell — the automation has
+   to descend into the frame to read anything in here. #}
+<html>
+<head>
+<title>Loan Servicing</title>
+<meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1">
+</head>
+<body bgcolor="#ffffff" topmargin="2" leftmargin="2" marginheight="2" marginwidth="2">
+<table width="100%" border="0" cellpadding="4" cellspacing="1" class="c1" bgcolor="#b8b8b8">
+{% if m %}
+<tr class="row1" bgcolor="#eef2f6">
+  <td class="c1" width="120" align="right" nowrap><font face="Verdana,Arial" size="2">Loan status</font></td>
+  <td class="c2" bgcolor="#ffffff">
+    <font face="Verdana,Arial" size="2">{% if m.loan_taken %}Active loan on file{% else %}No loan on file{% endif %}</font>
+  </td>
+</tr>
+<tr class="row2" bgcolor="#eef2f6">
+  <td class="c1" align="right" nowrap><font face="Verdana,Arial" size="2">Loan amount</font></td>
+  <td class="c2" bgcolor="#ffffff"><font face="Verdana,Arial" size="2">{{ m.loan_amount|money }}</font></td>
+</tr>
+<tr class="row1" bgcolor="#eef2f6">
+  <td class="c1" align="right" nowrap><font face="Verdana,Arial" size="2">Servicing branch</font></td>
+  <td class="c2" bgcolor="#ffffff"><font face="Verdana,Arial" size="2">{{ m.region }} Main</font></td>
+</tr>
+{% else %}
+<tr class="row1" bgcolor="#ffffff">
+  <td class="c1"><font face="Verdana,Arial" size="2" color="#a00000">Lending record unavailable.</font></td>
+</tr>
+{% endif %}
+</table>
+</body>
+</html>

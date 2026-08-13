@@ -1,0 +1,36 @@
+# Computer-Use Automation System — dependencies
+#
+#   python -m venv .venv
+#   .venv\Scripts\activate            (Windows)   |   source .venv/bin/activate  (POSIX)
+#   pip install -r requirements.txt
+#   playwright install chromium       <- REQUIRED, see note below
+#
+# Requires Python 3.11+.
+#
+# Ranges are pinned to a tested minor floor and capped below the next major, so a
+# clone resolves to something known-good without freezing on a patch release.
+
+# --- target app (the fake credit union portal) ---------------------------------
+Flask>=3.1,<4.0
+
+# --- discovery (LLM-driven; the only place the model is used) ------------------
+anthropic>=0.107,<1.0
+
+# --- browser automation, both discovery and replay -----------------------------
+# `pip install playwright` only installs the Python client. The Chromium binary is
+# a separate download and the system will not run without it:
+#
+#     playwright install chromium
+#
+playwright>=1.55,<2.0
+
+# --- contracts and policy ------------------------------------------------------
+# Artifacts and result envelopes are validated against JSON Schema on save and load.
+jsonschema>=4.26,<5.0
+# policy.yaml: origin/route allowlist and permitted action types.
+PyYAML>=6.0,<7.0
+
+# --- tests ---------------------------------------------------------------------
+# Kept in the same file deliberately: the demo evidence set is reproduced by running
+# the suite, so a fresh clone needs these to verify the system, not just to run it.
+pytest>=8.0,<10.0

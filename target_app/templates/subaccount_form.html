@@ -1,0 +1,117 @@
+{% extends "_shell.html" %}
+{% block title %}New Sub-Account — Demo Credit Union{% endblock %}
+{% block body %}
+<table width="700" border="0" cellpadding="0" cellspacing="0" class="c1" bgcolor="#ffffff">
+<tr class="row1">
+  <td class="c1" bgcolor="#00335f">
+    <table width="100%" border="0" cellpadding="6" cellspacing="0" class="c2">
+    <tr class="row1">
+      <td class="c1" align="left" nowrap>
+        <font face="Verdana,Arial" size="2" color="#ffffff"><b>Open Sub-Account</b></font>
+      </td>
+      <td class="c2" align="right" nowrap>
+        <font face="Verdana,Arial" size="1" color="#b9c8d8">{{ m.name }}&nbsp;/&nbsp;{{ m.id }}</font>
+      </td>
+    </tr>
+    </table>
+  </td>
+</tr>
+<tr class="row2">
+  <td class="c2">
+    {% if error %}
+    <table width="100%" border="0" cellpadding="7" cellspacing="0" class="c1">
+    <tr class="row1">
+      <td class="c1" bgcolor="#ffe8e8">
+        <font face="Verdana,Arial" size="2" color="#a00000"><b>{{ error }}</b></font>
+      </td>
+    </tr>
+    </table>
+    {% endif %}
+
+    <form method="post" action="/member/{{ m.id }}/sub-account/new">
+    <table width="100%" border="0" cellpadding="7" cellspacing="0" class="c2">
+    <tr class="row1">
+      <td class="c1" colspan="2">
+        <font face="Verdana,Arial" size="1" color="#444444">
+          All fields are required. The account is not created until the confirmation
+          screen is accepted.
+        </font>
+      </td>
+    </tr>
+    <tr class="row2">
+      <td class="c1" width="180" align="right" valign="top" nowrap>
+        <font face="Verdana,Arial" size="2">Account type</font>
+      </td>
+      <td class="c2">
+        <select name="ddlActType">
+          {% for t in account_types %}
+          <option value="{{ t }}"{% if form.acct_type == t %} selected{% endif %}>{{ t }}</option>
+          {% endfor %}
+        </select>
+      </td>
+    </tr>
+    <tr class="row1">
+      <td class="c1" align="right" valign="top" nowrap>
+        <font face="Verdana,Arial" size="2">Account nickname</font>
+      </td>
+      <td class="c2">
+        <input type="text" name="txtNick" size="30" maxlength="40" value="{{ form.nickname }}">
+      </td>
+    </tr>
+    <tr class="row2">
+      <td class="c1" align="right" valign="top" nowrap>
+        <font face="Verdana,Arial" size="2">Initial deposit</font>
+      </td>
+      <td class="c2">
+        <input type="text" name="txtDep" size="14" maxlength="12" value="{{ form.deposit }}">
+        &nbsp;<font face="Verdana,Arial" size="1" color="#777777">minimum $25.00</font>
+      </td>
+    </tr>
+    <tr class="row1">
+      <td class="c1" align="right" valign="top" nowrap>
+        <font face="Verdana,Arial" size="2">Funding source</font>
+      </td>
+      <td class="c2">
+        <select name="ddlFund">
+          {% for f in funding_sources %}
+          <option value="{{ f }}"{% if form.funding == f %} selected{% endif %}>{{ f }}</option>
+          {% endfor %}
+        </select>
+      </td>
+    </tr>
+    <tr class="row2">
+      <td class="c1" align="right" valign="top" nowrap>
+        <font face="Verdana,Arial" size="2">Statement delivery</font>
+      </td>
+      <td class="c2">
+        <font face="Verdana,Arial" size="2">
+          <input type="radio" name="rdoStmt" value="Mail"{% if form.statements == 'Mail' %} checked{% endif %}>&nbsp;Mail
+          &nbsp;&nbsp;&nbsp;
+          <input type="radio" name="rdoStmt" value="Electronic"{% if form.statements == 'Electronic' %} checked{% endif %}>&nbsp;Electronic
+        </font>
+      </td>
+    </tr>
+    <tr class="row1">
+      <td class="c1" align="right" valign="top" nowrap>
+        <font face="Verdana,Arial" size="2">Overdraft link</font>
+      </td>
+      <td class="c2">
+        <font face="Verdana,Arial" size="2">
+          <input type="checkbox" name="chkOd" value="Y"{% if form.overdraft %} checked{% endif %}>&nbsp;Link to primary savings
+        </font>
+      </td>
+    </tr>
+    <tr class="row2">
+      <td class="c1">&nbsp;</td>
+      <td class="c2" bgcolor="#efefef">
+        <input type="submit" value="Review">
+        &nbsp;&nbsp;
+        <a href="/member/{{ m.id }}"><font face="Verdana,Arial" size="2" color="#00335f">Cancel</font></a>
+      </td>
+    </tr>
+    </table>
+    </form>
+  </td>
+</tr>
+</table>
+{% endblock %}

@@ -1,0 +1,77 @@
+{% extends "_shell.html" %}
+{% block title %}Operator Login — Demo Credit Union{% endblock %}
+{% block body %}
+<table width="100%" border="0" cellpadding="0" cellspacing="0" class="c1">
+<tr class="row1">
+  <td class="c1" align="center">
+
+    <table width="430" border="0" cellpadding="0" cellspacing="0" class="c2" bgcolor="#ffffff">
+    <tr class="row1">
+      <td class="c1" bgcolor="#00335f">
+        <table width="100%" border="0" cellpadding="6" cellspacing="0" class="c1">
+        <tr class="row1">
+          <td class="c1"><font face="Verdana,Arial" size="2" color="#ffffff"><b>Operator Login</b></font></td>
+        </tr>
+        </table>
+      </td>
+    </tr>
+    <tr class="row2">
+      <td class="c2">
+        <table width="100%" border="0" cellpadding="7" cellspacing="0" class="c2">
+        <tr class="row1">
+          <td class="c1" colspan="2">
+            <font face="Verdana,Arial" size="1" color="#444444">
+              Authorised personnel only. Sign on with your branch operator credentials.
+            </font>
+          </td>
+        </tr>
+        <form method="post" action="/login">
+        <tr class="row2">
+          <td class="c1" width="140" align="right" nowrap>
+            <font face="Verdana,Arial" size="2">Operator ID</font>
+          </td>
+          <td class="c2">
+            <input type="text" name="usr" size="22" maxlength="24">
+          </td>
+        </tr>
+        <tr class="row1">
+          <td class="c1" align="right" nowrap>
+            <font face="Verdana,Arial" size="2">Password</font>
+          </td>
+          <td class="c2">
+            <input type="password" name="pwd" size="22" maxlength="24">
+          </td>
+        </tr>
+        <tr class="row2">
+          <td class="c1" align="right" nowrap>
+            <font face="Verdana,Arial" size="2">Branch</font>
+          </td>
+          <td class="c2">
+            <select name="ddlBr">
+              <option value="E14">E14 — Eastern Main</option>
+              <option value="E22">E22 — Eastern Riverside</option>
+              <option value="W07">W07 — Western Plaza</option>
+            </select>
+          </td>
+        </tr>
+        <tr class="row1">
+          <td class="c1">&nbsp;</td>
+          <td class="c2">
+            <input type="submit" value="Sign On">
+          </td>
+        </tr>
+        </form>
+        </table>
+      </td>
+    </tr>
+    </table>
+
+    <br>
+    <font face="Verdana,Arial" size="1" color="#555555">
+      Trouble signing on? Contact the branch systems desk on extension 4180.
+    </font>
+
+  </td>
+</tr>
+</table>
+{% endblock %}

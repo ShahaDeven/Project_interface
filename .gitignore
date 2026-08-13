@@ -1,0 +1,50 @@
+# --- secrets ------------------------------------------------------------------
+# Discovery needs an Anthropic API key. It goes in .env and never in the repo.
+.env
+.env.*
+!.env.example
+*.key
+
+# --- python -------------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+
+# --- virtualenvs --------------------------------------------------------------
+.venv/
+venv/
+env/
+
+# --- tooling caches -----------------------------------------------------------
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# --- run output ---------------------------------------------------------------
+# Per-run evidence is disposable and heavy: screenshots, DOM snapshots and full
+# model transcripts, one directory per run. Ad-hoc runs stay local.
+evidence/run_*/
+*.log
+
+# The curated demo evidence set IS committed — it is the storytelling minimum
+# from DESIGN §10, and a reviewer who never runs the code should still be able to
+# read it. Promote a run by copying it under evidence/demo/.
+!evidence/demo/
+
+# --- editors / OS -------------------------------------------------------------
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# --- local only, not part of the submission -----------------------------------
+# Leading "/" anchors to the repo root (this file's directory). A leading "./" is
+# not valid gitignore syntax and silently matches nothing.
+/FOUND_GAPS.md
+/Assignment A — Computer-Use Automation System.pdf

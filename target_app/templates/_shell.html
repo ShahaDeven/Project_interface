@@ -1,0 +1,124 @@
+{#
+  Page chrome. Nested-table layout, no CSS file, no id attributes, no data-*,
+  no semantic HTML5 elements, generic class names reused for unrelated things.
+  This is intentional (DESIGN.md §2) — the automation must cope with it.
+#}
+<html>
+<head>
+<title>{% block title %}Demo Credit Union — Operator Services{% endblock %}</title>
+<meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1">
+{# The app reports its own build, the way a vendor product does. This is NOT a
+   test hook: it identifies the *application*, not any element, so it gives the
+   automation no help locating anything. It exists so the artifact's
+   `recorded_against.app_fingerprint` has a real source and drift can be detected. #}
+<meta name="generator" content="{{ app_fingerprint }}">
+</head>
+<body bgcolor="#c8c8c8" topmargin="0" leftmargin="0" marginheight="0" marginwidth="0">
+
+<table width="100%" border="0" cellpadding="0" cellspacing="0" class="c1">
+<tr class="row1">
+  <td class="c1" bgcolor="#00335f">
+    <table width="100%" border="0" cellpadding="6" cellspacing="0" class="c2">
+    <tr class="row1">
+      <td class="c1" align="left" nowrap>
+        <font face="Verdana,Arial" size="4" color="#ffffff"><b>DEMO CREDIT UNION</b></font>
+      </td>
+      <td class="c2" align="right" nowrap>
+        <font face="Verdana,Arial" size="1" color="#b9c8d8">Operator Services Terminal&nbsp;&nbsp;build {{ app_build }}</font>
+      </td>
+    </tr>
+    </table>
+  </td>
+</tr>
+
+<tr class="row2">
+  <td class="c2" bgcolor="#dfdfdf">
+    <table width="100%" border="0" cellpadding="4" cellspacing="0" class="c1">
+    <tr class="row2">
+      <td class="c1" align="left" nowrap>
+        {% if session.get('operator') %}
+        <font face="Verdana,Arial" size="1" color="#000000">
+          <a href="/search"><font size="1" color="#00335f">Member Lookup</font></a>
+          &nbsp;|&nbsp;
+          <font color="#777777">Teller Batch</font>
+          &nbsp;|&nbsp;
+          <font color="#777777">Rate Board</font>
+          &nbsp;|&nbsp;
+          <font color="#777777">Reports</font>
+        </font>
+        {% else %}
+        <font face="Verdana,Arial" size="1" color="#777777">Not signed on</font>
+        {% endif %}
+      </td>
+      <td class="c2" align="right" nowrap>
+        {% if session.get('operator') %}
+        <font face="Verdana,Arial" size="1" color="#000000">
+          Operator: <b>{{ operator_name }}</b>
+          &nbsp;&nbsp;Region: <b>{{ operator_region }}</b>
+          &nbsp;&nbsp;Last sign-on: 03/14 08:12
+        </font>
+        {% endif %}
+      </td>
+    </tr>
+    </table>
+  </td>
+</tr>
+
+<tr class="row1">
+  <td class="c1">
+    <table width="100%" border="0" cellpadding="10" cellspacing="0" class="c2">
+    <tr class="row1">
+      <td class="c1" valign="top">
+{% block body %}{% endblock %}
+      </td>
+    </tr>
+    </table>
+  </td>
+</tr>
+
+<tr class="row2">
+  <td class="c2" bgcolor="#00335f">
+    <table width="100%" border="0" cellpadding="5" cellspacing="0" class="c1">
+    <tr class="row2">
+      <td class="c1" align="center">
+        <font face="Verdana,Arial" size="1" color="#9fb4c8">
+          Demo Credit Union internal system. Activity is recorded. Member data is confidential.
+        </font>
+      </td>
+    </tr>
+    </table>
+  </td>
+</tr>
+</table>
+
+{% if show_dialog %}
+{# Injected by ?chaos=dialog. Unannounced, unstyled by any convention the
+   automation could have recorded -> should surface as UNKNOWN_DIALOG. #}
+<div style="position:fixed;top:0px;left:0px;width:100%;height:100%;background-color:#000000;opacity:0.45;filter:alpha(opacity=45)"></div>
+<div style="position:fixed;top:170px;left:50%;margin-left:-235px;width:470px;background-color:#ffffff;border:2px solid #00335f">
+  <table width="100%" border="0" cellpadding="8" cellspacing="0" class="c1">
+  <tr class="row1">
+    <td class="c1" bgcolor="#00335f">
+      <font face="Verdana,Arial" size="2" color="#ffffff"><b>System Notice</b></font>
+    </td>
+  </tr>
+  <tr class="row2">
+    <td class="c2">
+      <font face="Verdana,Arial" size="2">
+        Scheduled maintenance at 6 PM. Unsaved work in open forms will be lost.
+      </font>
+    </td>
+  </tr>
+  <tr class="row1">
+    <td class="c1" align="right" bgcolor="#efefef">
+      <form method="get" action="{{ request.path }}">
+        <input type="submit" value="Acknowledge">
+      </form>
+    </td>
+  </tr>
+  </table>
+</div>
+{% endif %}
+
+</body>
+</html>
