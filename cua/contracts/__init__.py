@@ -136,11 +136,21 @@ def _artifact_integrity_problems(artifact):
         if name not in artifact.get("outputs", {}):
             problems.append(f"steps/{ids[0]}: reads into '{name}', which is not a declared output")
 
-    # Templates resolve against something the caller actually supplies.
+    # Templates resolve against something the caller actually supplies. Checkpoints
+    # are included: a checkpoint may legitimately reference an input (asserting you
+    # landed on *this* member's page), and an unresolvable one would fail at replay
+    # with no indication that the artifact was malformed rather than the app broken.
     for step in steps:
         where = f"steps/{step.get('id')}"
         problems += _template_problems(where, step.get("url"), declared_inputs, declared_secrets)
         problems += _template_problems(where, step.get("value"), declared_inputs, declared_secrets)
+        checkpoint = step.get("checkpoint") or {}
+        problems += _template_problems(f"{where}/checkpoint", checkpoint.get("value"),
+                                       declared_inputs, declared_secrets)
+
+    success = (artifact.get("success") or {}).get("checkpoint") or {}
+    problems += _template_problems("success/checkpoint", success.get("value"),
+                                   declared_inputs, declared_secrets)
 
     # Outcome codes are what the caller branches on, so they must be unambiguous.
     codes = [outcome.get("code") for outcome in artifact.get("expected_outcomes", [])]

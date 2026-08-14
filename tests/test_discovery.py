@@ -192,6 +192,34 @@ class TestLoop:
         assert len(rejected) == 1
         assert "Alice Torres" in rejected[0]["claimed"]
 
+    def test_a_value_cannot_be_the_success_checkpoint(self, evidence):
+        """The failure this exists to prevent: the agent quotes a balance it just
+        read. It is genuinely on the page, so a presence check passes — and the
+        capability then succeeds only for the member it was recorded against,
+        failing for every other input with no obvious cause."""
+        result, _, _ = run_loop([
+            tool_use("read", element_index=2, label="savings_balance", reason="the goal"),
+            tool_use("done", summary="", outputs={}, success_evidence="$4,523.18"),
+            tool_use("done", summary="", outputs={}, success_evidence="Member Profile"),
+        ], evidence, surface=FakeSurface(present={"Member Profile", "$4,523.18"}))
+
+        assert result.status == "SUCCESS"
+        rejected = [e for e in evidence.read_trace()
+                    if e["event"] == "success_evidence_rejected"]
+        assert [e["why"] for e in rejected] == ["varies_with_input"]
+
+    def test_an_input_value_cannot_be_the_success_checkpoint(self, evidence):
+        """Same trap from the other direction: text handed in by the goal."""
+        result, _, _ = run_loop([
+            tool_use("type", element_index=0, text="12345", reason="the member number"),
+            tool_use("done", summary="", outputs={}, success_evidence="Record 12345"),
+            tool_use("done", summary="", outputs={}, success_evidence="Member Profile"),
+        ], evidence, surface=FakeSurface(present={"Member Profile", "Record 12345"}))
+
+        assert result.status == "SUCCESS"
+        assert [e["why"] for e in evidence.read_trace()
+                if e["event"] == "success_evidence_rejected"] == ["varies_with_input"]
+
     def test_a_claim_that_stays_unquotable_fails_the_run(self, evidence):
         """Bounded: an agent that cannot find real text after being told exactly
         what is wrong will not find it on the fourth attempt either."""

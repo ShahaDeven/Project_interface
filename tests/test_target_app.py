@@ -211,6 +211,36 @@ class TestMutationFlow:
         assert expected in page
         assert "Confirm and Open Account" not in page
 
+    def test_the_opened_account_appears_on_the_profile(self, operator):
+        """The irreversible step has to leave a mark a later page can see, or the
+        risk gate is guarding an illusion."""
+        assert "No sub-accounts on file" in body_of(operator.get(f"/member/{REPLAY_ID}"))
+
+        operator.post(f"/member/{REPLAY_ID}/sub-account/confirm", data=VALID_SUBACCOUNT)
+
+        page = body_of(operator.get(f"/member/{REPLAY_ID}"))
+        assert re.search(rf"SA-{REPLAY_ID}-\d\d", page)
+        assert "Vacation fund" in page
+        assert "$150.00" in page
+
+    def test_savings_falls_only_when_funded_from_savings(self, operator):
+        """Cash at the branch funds the new account from elsewhere, so the member's
+        savings are untouched. A transfer out of savings is what moves the figure."""
+        before = body_of(operator.get(f"/member/{REPLAY_ID}"))
+        assert "$18,240.55" in before
+
+        operator.post(f"/member/{REPLAY_ID}/sub-account/confirm", data=VALID_SUBACCOUNT)
+        assert "$18,240.55" in body_of(operator.get(f"/member/{REPLAY_ID}"))
+
+        operator.post(f"/member/{REPLAY_ID}/sub-account/confirm",
+                      data={**VALID_SUBACCOUNT, "ddlFund": "Transfer from primary savings"})
+        assert "$18,090.55" in body_of(operator.get(f"/member/{REPLAY_ID}"))
+
+    def test_opened_accounts_do_not_survive_a_restart(self):
+        """State lives in process memory on purpose: a demo starts from a known
+        state by starting the server, so seeded data stays deterministic."""
+        assert d.sub_accounts_for(REPLAY_ID) == []
+
     def test_confirm_route_revalidates(self, operator):
         """A tampered confirm POST must not slip past the form's rules."""
         payload = {**VALID_SUBACCOUNT, "txtDep": "1"}
@@ -310,15 +340,21 @@ class TestAppFingerprint:
 
     def test_build_is_overridable_from_the_environment(self, monkeypatch):
         """The drift demo bumps the build without touching code, so the executor
-        can be shown warning on a real mismatch rather than a staged one."""
-        monkeypatch.setenv("TARGET_APP_BUILD", "4.3.0")
+        can be shown warning on a real mismatch rather than a staged one.
+
+        The override value is deliberately one the app will never ship. Using a
+        plausible next version would make this test pass the day that version
+        becomes the default, whether or not the override still worked."""
+        assert v.APP_BUILD != "9.9.9", "pick an override the app will never ship"
+
+        monkeypatch.setenv("TARGET_APP_BUILD", "9.9.9")
         import importlib
         reloaded = importlib.reload(v)
         try:
-            assert reloaded.APP_FINGERPRINT == "legacy-cu-portal@4.3.0"
+            assert reloaded.APP_FINGERPRINT == "legacy-cu-portal@9.9.9"
             page = body_of(create_app().test_client().get("/login"))
-            assert 'content="legacy-cu-portal@4.3.0"' in page
-            assert "build 4.3.0" in page
+            assert 'content="legacy-cu-portal@9.9.9"' in page
+            assert "build 9.9.9" in page
         finally:
             monkeypatch.delenv("TARGET_APP_BUILD")
             importlib.reload(v)

@@ -12,8 +12,17 @@
 # `meaning` is required by the schema. If you cannot say why an outcome is not a
 # failure, it is a failure.
 
+# `routes` scopes an outcome to the parts of the app that can produce it. Only
+# outcomes whose routes intersect the flow being recorded are attached, so a
+# read-only lookup does not declare a deposit rule it can never reach — and the
+# replay engine does not scan for that text after every step of every capability
+# forever. An outcome with no `routes` is app-wide and always attached.
+
 legacy-cu-portal:
   - code: MEMBER_NOT_FOUND
+    routes:
+      - ^/search$
+      - ^/member/[0-9]{5}$
     detect:
       condition: text_present
       value: "No member matches this number"
@@ -22,6 +31,8 @@ legacy-cu-portal:
       re-prompt or refer the case. Not a failure of the automation.
 
   - code: PERMISSION_DENIED
+    routes:
+      - ^/member/[0-9]{5}
     detect:
       condition: text_present
       value: "Member outside your region"
@@ -31,6 +42,8 @@ legacy-cu-portal:
       differently-scoped operator.
 
   - code: DEPOSIT_BELOW_MINIMUM
+    routes:
+      - ^/member/[0-9]{5}/sub-account/
     detect:
       condition: text_present
       value: "Initial deposit must be at least"

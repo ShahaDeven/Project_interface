@@ -63,6 +63,11 @@ class RiskPolicy:
         if action != "click" or not form:
             return READ_ONLY
 
+        # Belonging to a form is not the same as submitting one. Absent the flag
+        # (an older trace) the conservative reading applies: assume it submits.
+        if not form.get("submits", True):
+            return READ_ONLY
+
         method = (form.get("method") or "get").lower()
         path = self._path(form.get("action"))
 

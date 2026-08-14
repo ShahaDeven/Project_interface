@@ -18,6 +18,21 @@ if str(ROOT) not in sys.path:
 from target_app import create_app  # noqa: E402
 
 
+@pytest.fixture(autouse=True)
+def reset_target_app_state():
+    """Sub-accounts opened by one test must not be visible to the next.
+
+    The store is module-level and the live server shares this process, so without
+    this a test that opens an account changes another test's expected balance —
+    and the failure surfaces as an unrelated assertion, in a different file,
+    depending on run order.
+    """
+    from target_app import data
+    data.reset_sub_accounts()
+    yield
+    data.reset_sub_accounts()
+
+
 @pytest.fixture(scope="session")
 def app():
     """The portal holds no mutable server state, so one app for the session is safe."""

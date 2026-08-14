@@ -116,7 +116,9 @@ def create_app():
         if not d.in_operator_region(member):
             return render_template("denied.html", member_id=member_id,
                                    member_region=member["region"]), 403
-        return render_template("member.html", m=member)
+        return render_template("member.html", m=member,
+                               balance=d.effective_balance(member),
+                               sub_accounts=d.sub_accounts_for(member_id))
 
     @app.route("/member/<member_id>/loan-frame")
     def loan_frame(member_id):
@@ -160,10 +162,18 @@ def create_app():
         if error:
             return render_template("subaccount_form.html", m=member,
                                    form=form, error=error)
-        return render_template(
-            "subaccount_done.html", m=member, form=form,
-            account_number=d.sub_account_number(member["id"], form["acct_type"]),
+
+        # The irreversible step. Everything before this screen can be abandoned;
+        # this is the one that leaves a mark the member's profile will show.
+        opened = d.record_sub_account(
+            member_id=member["id"],
+            account_type=form["acct_type"],
+            nickname=form["nickname"],
+            deposit=float(form["deposit"].replace(",", "").replace("$", "")),
+            funding=form["funding"],
         )
+        return render_template("subaccount_done.html", m=member, form=form,
+                               account_number=opened["number"])
 
     @app.errorhandler(500)
     def server_error(_exc):

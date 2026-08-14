@@ -26,5 +26,14 @@ complementary; this one carries the human-readable story.
 import os
 
 APP_NAME = "legacy-cu-portal"
-APP_BUILD = os.environ.get("TARGET_APP_BUILD", "4.2.1")
+
+# 4.3.0 — the member profile grew a sub-accounts table and its savings figure
+#         became computed rather than static.
+# 4.2.1 — initial build.
+#
+# Bumped by hand when the surface changes, which is the honest version of what a
+# vendor does. Leaving it at 4.2.1 after changing the profile page would have made
+# the fingerprint tell a small lie: artifacts recorded before and after would claim
+# to have been recorded against the same app.
+APP_BUILD = os.environ.get("TARGET_APP_BUILD", "4.3.0")
 APP_FINGERPRINT = "{}@{}".format(APP_NAME, APP_BUILD)

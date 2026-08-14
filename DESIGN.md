@@ -55,8 +55,12 @@ and its schema is the instruction set.
   policy/             allowlist, risk gates, redaction
   hitl/               pause/resume state machine, terminal operator prompt
   contracts/          JSON Schemas: artifact, result envelope
+  config.py           model, stopping conditions, {secrets.*} resolution
+  evidence.py         per-run directory, trace/transcript writers
+/policy.yaml          allowlist + per-step risk routes (§8)
+/outcomes.yaml        business outcomes declared per app (§5, §6)
 /capabilities/        saved artifacts (one JSON per capability)
-/evidence/            per-run directories (see §8)
+/evidence/            per-run directories (see §10)
 ```
 
 ---
@@ -88,14 +92,23 @@ A fake credit union operator portal, styled like 2003 enterprise software.
   "Member outside your region" denial screen (PERMISSION_DENIED trigger)
 - ID `99999` → "No member matches this number" (MEMBER_NOT_FOUND trigger)
 - Seed ~10 members with plausible fake data. No real PII, ever.
+- **Opened sub-accounts persist in process memory** and appear on the member's
+  profile; a deposit funded from primary savings reduces the savings figure, one
+  funded at the branch does not. The irreversible step has to leave a mark a later
+  page can see, or the risk gate is guarding an illusion. Memory rather than a
+  database so seeded data stays deterministic: a demo starts from a known state by
+  starting the server.
 
 **Self-reported build (feeds `app_fingerprint`, §5):** every page carries the app's
-own identity — `<meta name="generator" content="legacy-cu-portal@4.2.1">` plus a
-visible `build 4.2.1` in the masthead. Not a test hook: it identifies the
+own identity — `<meta name="generator" content="legacy-cu-portal@4.3.0">` plus a
+visible `build 4.3.0` in the masthead. Not a test hook: it identifies the
 *application*, not any element, so it gives the automation no help locating
 anything. The build is overridable via the `TARGET_APP_BUILD` environment variable
-so drift can be demonstrated without editing code (record at 4.2.1, replay against
-4.3.0, watch the warning fire).
+so drift can be demonstrated without editing code (record at the shipped build,
+replay against a bumped one, watch the warning fire). The build is raised by hand
+whenever the surface changes — it went to 4.3.0 when the profile page grew its
+sub-accounts table — because a version that never moves is a version that can
+never disagree with a recording.
 
 **Chaos flags (query params, for injecting runtime conditions during replay demos):**
 - `?chaos=slow` — 8s delay on next page load (recoverable: wait/retry)
@@ -176,13 +189,13 @@ One JSON file per capability in `/capabilities/`. Validated against
     "requires_secrets": ["operator_id", "operator_password"],
     "recorded_against": {
       "app": "legacy-cu-portal",
-      "app_fingerprint": "legacy-cu-portal@4.2.1",
+      "app_fingerprint": "legacy-cu-portal@4.3.0",
       "recorded_at": "<iso8601>",
       "discovery_run_id": "run_..."
     }
   },
   "inputs": {
-    "member_id": { "type": "string", "pattern": "^[0-9]{5}$", "required": true,
+    "member_number": { "type": "string", "pattern": "^[0-9]{5}$", "required": true,
                    "description": "5-digit member number" }
   },
   "outputs": {
@@ -205,7 +218,7 @@ One JSON file per capability in `/capabilities/`. Validated against
         { "kind": "label", "value": "Member number" },
         { "kind": "structural", "value": "form table tr:nth-of-type(1) input" },
         { "kind": "coordinates", "value": [412, 288], "verify_text_nearby": "Member number" } ] },
-      "value": "{inputs.member_id}", "risk": "read_only" },
+      "value": "{inputs.member_number}", "risk": "read_only" },
     { "id": 5, "action": "read",
       "target": { "strategies": [ { "kind": "label", "value": "Savings balance" } ] },
       "output": "savings_balance", "risk": "read_only" }
@@ -284,7 +297,7 @@ AI agent, not a human reading prose.
   "capability_version": "1.0.0",
   "mode": "discovery | replay",
   "status": "SUCCESS | BUSINESS_OUTCOME | NEEDS_INTERVENTION | HARD_FAILURE",
-  "inputs": { "member_id": "12345" },
+  "inputs": { "member_number": "12345" },
   "started_at": "...", "ended_at": "...",
   "steps_completed": 6, "steps_total": 6,
   "llm_call_count": 0,
@@ -343,12 +356,33 @@ knew the fix, it would be a recoverable condition):
 - **Allowlist** (`policy.yaml`): permitted origins/routes + permitted action types.
   Enforced in the executor before any navigate/click/type — in both discovery and replay.
   The agent cannot act outside it; violations end the run.
+- **Risk classification** (`policy.yaml`, `risk:`): decided from what the browser
+  actually did — the method of the submitted form and the route it posted to —
+  never from the model and never from a button's wording, since "Confirm" means
+  nothing on its own. A GET is read-only by construction. A POST is a mutation
+  unless its route says otherwise (signing in POSTs and creates nothing). An
+  unrecognised POST is `mutating`: over-classifying costs an approval flag,
+  under-classifying costs an unreviewed write to a member's account. Crucially,
+  only a control that *submits* counts — every field on a POST form belongs to
+  that form, so without that distinction clicking a dropdown reads as a mutation
+  and a capability reports five mutating steps when it has one.
 - **Risk gates:** `read_only` → auto-allowed. `mutating` → allowed in replay only if the
   invocation passes `--approve-mutations` (else pause). `irreversible` (e.g., final
   confirmation of sub-account creation) → always pauses for explicit human confirmation
   via the HITL path, discovery and replay alike. Conservative by design; justified in
   REPORT.md as the right default for regulated finance.
-- **Redaction:** a redaction layer sits between raw observations and anything persisted.
+- **Redaction:** credentials are handled *structurally* rather than filtered. The
+  model is told to type the literal token `{secrets.operator_password}`; the
+  executor substitutes the real value at the keystroke, and the trace records the
+  token. The secret is therefore absent from the transcript, the trace, the
+  artifact and the model's context — not scrubbed from them. A password field's
+  value is never even read during element distillation, so it does not exist in
+  our process to leak. Business values are separate: a `read` step records the
+  value's *shape* and a masked form (`$•••••`) in the trace, which is enough for
+  the distiller to type the output, while the figure itself travels only in the
+  caller-bound result envelope.
+
+  A redaction layer sits between raw observations and anything persisted.
   Credentials/session tokens never enter traces, artifacts, or logs. Extracted outputs
   are persisted only in the result envelope (caller-bound), not duplicated into debug
   logs. Screenshots on sensitive pages mask value regions where feasible; balances in
@@ -387,7 +421,13 @@ Run states: `RUNNING → PAUSED_FOR_HUMAN → RESUMING → (terminal)`.
 
 Per run: `/evidence/run_<id>/` containing:
 - `trace.jsonl` — structured step log: action, target descriptor, strategy used
-  (replay), checkpoint result, outcome scans, recoveries, timings, llm_call_count
+  (replay), checkpoint result, outcome scans, recoveries, timings, llm_call_count.
+  Page-transitioning steps also record the state they landed in (`after`: URL, and
+  a page marker when the document offers text worth asserting). Without it the
+  distiller has nothing from which to synthesise a per-step checkpoint, and the
+  schema requires one on every navigate and click. Absent a usable marker the
+  checkpoint falls back to the URL rather than inventing text — templated, so a
+  checkpoint on member 12345's profile still holds for member 23456.
 - `screenshots/` — on failure, on outcome detection, on intervention (always);
   per-step optional via `--screenshots=all`
 - Discovery runs additionally: full model transcript (requests/responses)
@@ -417,10 +457,19 @@ Per run: `/evidence/run_<id>/` containing:
 python -m cua target_app serve                     # start the fake portal
 python -m cua discover --goal "look up member 12345 and read their savings balance" \
        --target http://localhost:5000 --save-as lookup_member_balance
-python -m cua replay lookup_member_balance --param member_id=23456
-python -m cua replay lookup_member_balance --param member_id=99999   # business outcome demo
-python -m cua replay open_sub_account --param member_id=23456 --approve-mutations
+python -m cua replay lookup_member_balance --param member_number=23456
+python -m cua replay lookup_member_balance --param member_number=99999  # business outcome
+python -m cua replay open_sub_account --param member_number=23456 \
+       --param account_type="Holiday Club" --param account_nickname="Vacation fund" \
+       --param initial_deposit=150.00 --approve-mutations
 ```
+
+Input names are **derived from the field's on-screen label**, not authored — the
+distiller slugifies whatever text names the control (`Member number` →
+`member_number`). A hand-picked mapping would read better and would be one more
+thing to keep in step with a UI nobody controls.
+
+Built so far: `target_app serve`, `validate`, `discover`. `replay` is Day 3.
 
 ---
 

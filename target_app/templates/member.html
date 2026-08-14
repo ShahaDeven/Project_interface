@@ -34,7 +34,7 @@
     </tr>
     <tr class="row1" bgcolor="#eef2f6">
       <td class="c1" align="right" nowrap><font face="Verdana,Arial" size="2">Savings balance</font></td>
-      <td class="c2" bgcolor="#ffffff"><font face="Verdana,Arial" size="2"><b>{{ m.savings_balance|money }}</b></font></td>
+      <td class="c2" bgcolor="#ffffff"><font face="Verdana,Arial" size="2"><b>{{ balance|money }}</b></font></td>
       <td class="c1" align="right" nowrap><font face="Verdana,Arial" size="2">Credit score</font></td>
       <td class="c2" bgcolor="#ffffff"><font face="Verdana,Arial" size="2">{{ m.credit_score }}</font></td>
     </tr>
@@ -54,6 +54,44 @@
       <td class="c1">
         {# Served from a separate subsystem, embedded the way 2003 did it. #}
         <iframe src="/member/{{ m.id }}/loan-frame" width="520" height="128" frameborder="1" scrolling="no"></iframe>
+      </td>
+    </tr>
+    </table>
+  </td>
+</tr>
+
+<tr class="row1">
+  <td class="c1">
+    <table width="100%" border="0" cellpadding="6" cellspacing="0" class="c2">
+    <tr class="row2">
+      <td class="c1">
+        <font face="Verdana,Arial" size="1" color="#444444"><b>Sub-accounts</b></font>
+      </td>
+    </tr>
+    <tr class="row1">
+      <td class="c1">
+        {% if sub_accounts %}
+        <table width="100%" border="0" cellpadding="5" cellspacing="1" class="c1" bgcolor="#b8b8b8">
+        <tr class="row2" bgcolor="#dfe6ee">
+          <td class="c1" nowrap><font face="Verdana,Arial" size="1"><b>Account</b></font></td>
+          <td class="c2" nowrap><font face="Verdana,Arial" size="1"><b>Type</b></font></td>
+          <td class="c1" nowrap><font face="Verdana,Arial" size="1"><b>Nickname</b></font></td>
+          <td class="c2" nowrap><font face="Verdana,Arial" size="1"><b>Balance</b></font></td>
+          <td class="c1" nowrap><font face="Verdana,Arial" size="1"><b>Funded by</b></font></td>
+        </tr>
+        {% for account in sub_accounts %}
+        <tr class="row1" bgcolor="#ffffff">
+          <td class="c1" nowrap><font face="Verdana,Arial" size="2">{{ account.number }}</font></td>
+          <td class="c2" nowrap><font face="Verdana,Arial" size="2">{{ account.account_type }}</font></td>
+          <td class="c1" nowrap><font face="Verdana,Arial" size="2">{{ account.nickname }}</font></td>
+          <td class="c2" nowrap><font face="Verdana,Arial" size="2">{{ account.deposit|money }}</font></td>
+          <td class="c1" nowrap><font face="Verdana,Arial" size="2">{{ account.funding }}</font></td>
+        </tr>
+        {% endfor %}
+        </table>
+        {% else %}
+        <font face="Verdana,Arial" size="2" color="#555555">No sub-accounts on file.</font>
+        {% endif %}
       </td>
     </tr>
     </table>

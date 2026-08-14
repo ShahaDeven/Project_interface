@@ -1,0 +1,445 @@
+{
+  "schema_version": "1.0",
+  "capability": {
+    "name": "open_sub_account",
+    "version": "1.0.0",
+    "description": "Recorded from the goal: open a new sub-account for member {inputs.member_number}, account type '{inputs.account_type}', nickname '{inputs.account_nickname}', with an opening deposit of {inputs.initial_deposit}, and open the account. Returns new_account_number.",
+    "recorded_against": {
+      "app": "legacy-cu-portal",
+      "app_fingerprint": "legacy-cu-portal@4.3.0",
+      "recorded_at": "2026-08-14T16:34:12Z",
+      "discovery_run_id": "run_20260814_123337"
+    },
+    "requires_secrets": [
+      "operator_id",
+      "operator_password"
+    ]
+  },
+  "inputs": {
+    "member_number": {
+      "type": "string",
+      "required": true,
+      "description": "Value for the 'Member number' field.",
+      "pattern": "^[0-9]{5}$"
+    },
+    "account_type": {
+      "type": "string",
+      "required": true,
+      "description": "Value for the 'Account type' field."
+    },
+    "account_nickname": {
+      "type": "string",
+      "required": true,
+      "description": "Value for the 'Account nickname' field."
+    },
+    "initial_deposit": {
+      "type": "string",
+      "required": true,
+      "description": "Value for the 'Initial deposit' field."
+    }
+  },
+  "outputs": {
+    "new_account_number": {
+      "type": "string",
+      "description": "Value shown for 'New account number'.",
+      "source_step": 13,
+      "parse": "text"
+    }
+  },
+  "expected_outcomes": [
+    {
+      "code": "MEMBER_NOT_FOUND",
+      "detect": {
+        "condition": "text_present",
+        "value": "No member matches this number"
+      },
+      "meaning": "Legitimate result: no member holds that number. The caller decides whether to re-prompt or refer the case. Not a failure of the automation."
+    },
+    {
+      "code": "PERMISSION_DENIED",
+      "detect": {
+        "condition": "text_present",
+        "value": "Member outside your region"
+      },
+      "meaning": "The operator's region scope excludes this member. A correct answer about access rather than a broken run — the caller may route the request to a differently-scoped operator."
+    },
+    {
+      "code": "DEPOSIT_BELOW_MINIMUM",
+      "detect": {
+        "condition": "text_present",
+        "value": "Initial deposit must be at least"
+      },
+      "meaning": "The application rejected the opening deposit as too small. A business rule speaking, not an automation error; the caller should adjust the amount."
+    }
+  ],
+  "steps": [
+    {
+      "id": 1,
+      "action": "navigate",
+      "risk": "read_only",
+      "reason": "Start at the application root",
+      "url": "{base_url}",
+      "checkpoint": {
+        "condition": "text_present",
+        "value": "Operator Login"
+      }
+    },
+    {
+      "id": 2,
+      "action": "type",
+      "risk": "read_only",
+      "reason": "Enter operator ID credential",
+      "target": {
+        "strategies": [
+          {
+            "kind": "label",
+            "value": "Operator ID",
+            "role": "textbox"
+          },
+          {
+            "kind": "structural",
+            "value": "body > table > tbody > tr:nth-of-type(3) > td > table > tbody > tr > td > table > tbody > tr > td > table > tbody > tr:nth-of-type(2) > td > table > tbody > tr:nth-of-type(2) > td:nth-of-type(2) > input"
+          },
+          {
+            "kind": "coordinates",
+            "value": [
+              677,
+              137
+            ],
+            "verify_text_nearby": "Operator ID"
+          }
+        ]
+      },
+      "value": "{secrets.operator_id}"
+    },
+    {
+      "id": 3,
+      "action": "type",
+      "risk": "read_only",
+      "reason": "Enter operator password credential",
+      "target": {
+        "strategies": [
+          {
+            "kind": "label",
+            "value": "Password",
+            "role": "password"
+          },
+          {
+            "kind": "structural",
+            "value": "body > table > tbody > tr:nth-of-type(3) > td > table > tbody > tr > td > table > tbody > tr > td > table > tbody > tr:nth-of-type(2) > td > table > tbody > tr:nth-of-type(3) > td:nth-of-type(2) > input"
+          },
+          {
+            "kind": "coordinates",
+            "value": [
+              677,
+              172
+            ],
+            "verify_text_nearby": "Password"
+          }
+        ]
+      },
+      "value": "{secrets.operator_password}"
+    },
+    {
+      "id": 4,
+      "action": "click",
+      "risk": "read_only",
+      "reason": "Sign on to the operator terminal",
+      "target": {
+        "strategies": [
+          {
+            "kind": "label",
+            "value": "Sign On",
+            "role": "button"
+          },
+          {
+            "kind": "structural",
+            "value": "body > table > tbody > tr:nth-of-type(3) > td > table > tbody > tr > td > table > tbody > tr > td > table > tbody > tr:nth-of-type(2) > td > table > tbody > tr:nth-of-type(5) > td:nth-of-type(2) > input"
+          },
+          {
+            "kind": "coordinates",
+            "value": [
+              618,
+              240
+            ],
+            "verify_text_nearby": "Sign On"
+          }
+        ]
+      },
+      "checkpoint": {
+        "condition": "text_present",
+        "value": "Member Lookup"
+      }
+    },
+    {
+      "id": 5,
+      "action": "type",
+      "risk": "read_only",
+      "reason": "Enter member number for lookup",
+      "target": {
+        "strategies": [
+          {
+            "kind": "label",
+            "value": "Member number",
+            "role": "textbox"
+          },
+          {
+            "kind": "structural",
+            "value": "body > table > tbody > tr:nth-of-type(3) > td > table > tbody > tr > td > table > tbody > tr:nth-of-type(2) > td > table > tbody > tr:nth-of-type(2) > td:nth-of-type(2) > input:nth-of-type(1)"
+          },
+          {
+            "kind": "coordinates",
+            "value": [
+              249,
+              140
+            ],
+            "verify_text_nearby": "Member number"
+          }
+        ]
+      },
+      "value": "{inputs.member_number}"
+    },
+    {
+      "id": 6,
+      "action": "click",
+      "risk": "read_only",
+      "reason": "Search for member {inputs.member_number}",
+      "target": {
+        "strategies": [
+          {
+            "kind": "label",
+            "value": "Look Up",
+            "role": "button"
+          },
+          {
+            "kind": "structural",
+            "value": "body > table > tbody > tr:nth-of-type(3) > td > table > tbody > tr > td > table > tbody > tr:nth-of-type(2) > td > table > tbody > tr:nth-of-type(2) > td:nth-of-type(2) > input:nth-of-type(2)"
+          },
+          {
+            "kind": "coordinates",
+            "value": [
+              358,
+              140
+            ],
+            "verify_text_nearby": "Look Up"
+          }
+        ]
+      },
+      "checkpoint": {
+        "condition": "text_present",
+        "value": "Member Profile"
+      }
+    },
+    {
+      "id": 7,
+      "action": "click",
+      "risk": "read_only",
+      "reason": "Open the sub-account creation form",
+      "target": {
+        "strategies": [
+          {
+            "kind": "label",
+            "value": "Open Sub-Account",
+            "role": "link"
+          },
+          {
+            "kind": "structural",
+            "value": "body > table > tbody > tr:nth-of-type(3) > td > table > tbody > tr > td > table > tbody > tr:nth-of-type(5) > td > table > tbody > tr > td:nth-of-type(1) > font > a:nth-of-type(1)"
+          },
+          {
+            "kind": "coordinates",
+            "value": [
+              77,
+              411
+            ],
+            "verify_text_nearby": "Open Sub-Account"
+          }
+        ]
+      },
+      "checkpoint": {
+        "condition": "url_matches",
+        "value": "/member/{inputs.member_number}/sub-account/new"
+      }
+    },
+    {
+      "id": 8,
+      "action": "type",
+      "risk": "read_only",
+      "reason": "Set account type to {inputs.account_type}",
+      "target": {
+        "strategies": [
+          {
+            "kind": "label",
+            "value": "Account type",
+            "role": "select"
+          },
+          {
+            "kind": "structural",
+            "value": "body > table > tbody > tr:nth-of-type(3) > td > table > tbody > tr > td > table > tbody > tr:nth-of-type(2) > td > form > table > tbody > tr:nth-of-type(2) > td:nth-of-type(2) > select"
+          },
+          {
+            "kind": "coordinates",
+            "value": [
+              271,
+              135
+            ],
+            "verify_text_nearby": "Account type"
+          }
+        ]
+      },
+      "value": "{inputs.account_type}"
+    },
+    {
+      "id": 9,
+      "action": "type",
+      "risk": "read_only",
+      "reason": "Set account nickname",
+      "target": {
+        "strategies": [
+          {
+            "kind": "label",
+            "value": "Account nickname",
+            "role": "textbox"
+          },
+          {
+            "kind": "structural",
+            "value": "body > table > tbody > tr:nth-of-type(3) > td > table > tbody > tr > td > table > tbody > tr:nth-of-type(2) > td > form > table > tbody > tr:nth-of-type(3) > td:nth-of-type(2) > input"
+          },
+          {
+            "kind": "coordinates",
+            "value": [
+              329,
+              169
+            ],
+            "verify_text_nearby": "Account nickname"
+          }
+        ]
+      },
+      "value": "{inputs.account_nickname}"
+    },
+    {
+      "id": 10,
+      "action": "type",
+      "risk": "read_only",
+      "reason": "Set the initial deposit amount",
+      "target": {
+        "strategies": [
+          {
+            "kind": "label",
+            "value": "Initial deposit",
+            "role": "textbox"
+          },
+          {
+            "kind": "structural",
+            "value": "body > table > tbody > tr:nth-of-type(3) > td > table > tbody > tr > td > table > tbody > tr:nth-of-type(2) > td > form > table > tbody > tr:nth-of-type(4) > td:nth-of-type(2) > input"
+          },
+          {
+            "kind": "coordinates",
+            "value": [
+              276,
+              204
+            ],
+            "verify_text_nearby": "Initial deposit"
+          }
+        ]
+      },
+      "value": "{inputs.initial_deposit}"
+    },
+    {
+      "id": 11,
+      "action": "click",
+      "risk": "mutating",
+      "reason": "Proceed to review the sub-account details before confirming",
+      "target": {
+        "strategies": [
+          {
+            "kind": "label",
+            "value": "Review",
+            "role": "button"
+          },
+          {
+            "kind": "structural",
+            "value": "body > table > tbody > tr:nth-of-type(3) > td > table > tbody > tr > td > table > tbody > tr:nth-of-type(2) > td > form > table > tbody > tr:nth-of-type(8) > td:nth-of-type(2) > input"
+          },
+          {
+            "kind": "coordinates",
+            "value": [
+              240,
+              337
+            ],
+            "verify_text_nearby": "Review"
+          }
+        ]
+      },
+      "checkpoint": {
+        "condition": "text_present",
+        "value": "Confirm Sub-Account"
+      }
+    },
+    {
+      "id": 12,
+      "action": "click",
+      "risk": "irreversible",
+      "reason": "Confirm and finalize opening the sub-account",
+      "target": {
+        "strategies": [
+          {
+            "kind": "label",
+            "value": "Confirm and Open Account",
+            "role": "button"
+          },
+          {
+            "kind": "structural",
+            "value": "body > table > tbody > tr:nth-of-type(3) > td > table > tbody > tr > td > table > tbody > tr:nth-of-type(2) > td > table:nth-of-type(3) > tbody > tr > td > form > input:nth-of-type(6)"
+          },
+          {
+            "kind": "coordinates",
+            "value": [
+              106,
+              352
+            ],
+            "verify_text_nearby": "Confirm and Open Account"
+          }
+        ]
+      },
+      "checkpoint": {
+        "condition": "url_matches",
+        "value": "/member/{inputs.member_number}/sub-account/confirm"
+      }
+    },
+    {
+      "id": 13,
+      "action": "read",
+      "risk": "read_only",
+      "reason": "Capture the newly created sub-account number as output",
+      "target": {
+        "strategies": [
+          {
+            "kind": "label",
+            "value": "New account number",
+            "role": "cell"
+          },
+          {
+            "kind": "structural",
+            "value": "body > table > tbody > tr:nth-of-type(3) > td > table > tbody > tr > td > table > tbody > tr:nth-of-type(2) > td > table:nth-of-type(1) > tbody > tr:nth-of-type(1) > td:nth-of-type(2)"
+          },
+          {
+            "kind": "coordinates",
+            "value": [
+              456,
+              107
+            ],
+            "verify_text_nearby": "New account number"
+          }
+        ]
+      },
+      "output": "new_account_number"
+    }
+  ],
+  "success": {
+    "checkpoint": {
+      "condition": "text_present",
+      "value": "Sub-account opened"
+    }
+  }
+}

@@ -95,8 +95,14 @@ class TestDistillation:
         assert "[0]" in rendered
 
     def test_fingerprint_is_read_from_the_page(self, surface, live_server):
+        """Compared against what the app reports, not against a literal — a
+        hardcoded build here breaks on every legitimate version bump, which trains
+        people to edit the test instead of asking why it changed."""
+        from target_app import version
+
         surface.navigate(f"{live_server}/login")
-        assert surface.observe().app_fingerprint == "legacy-cu-portal@4.2.1"
+        assert surface.observe().app_fingerprint == version.APP_FINGERPRINT
+        assert surface.observe().app_fingerprint.startswith("legacy-cu-portal@")
 
 
 # =============================================================================
@@ -139,6 +145,53 @@ class TestActions:
 
         surface._resolve(field, strategies=[label])
         assert surface.last_strategy.startswith("label:")
+
+    def test_typing_into_a_dropdown_selects_an_option(self, surface, live_server):
+        """`type` is the only value-setting verb, so it has to mean the right thing
+        per control. fill() throws outright on a <select>."""
+        surface.navigate(f"{live_server}/login")
+        branch = labelled(surface.observe(), "Branch")
+        assert branch.role == "select"
+        surface.type(branch, "W07 — Western Plaza")
+        assert surface.read(labelled(surface.observe(), "Branch")) == "W07"
+
+    def test_typing_into_a_checkbox_sets_its_state(self, surface, live_server):
+        sign_in(surface, live_server)
+        surface.navigate(f"{live_server}/member/12345/sub-account/new")
+        box = labelled(surface.observe(), "Link to primary savings")
+        surface.type(box, "yes")
+        assert surface.page.locator("input[type=checkbox]").is_checked()
+        surface.type(box, "no")
+        assert not surface.page.locator("input[type=checkbox]").is_checked()
+
+    def test_radios_in_one_group_are_told_apart(self, surface, live_server):
+        """Every radio in a group shares a cell, so the cell label names all of
+        them identically. Resolving that would pick whichever came first and
+        report success — a wrong answer, not a failure."""
+        sign_in(surface, live_server)
+        surface.navigate(f"{live_server}/member/12345/sub-account/new")
+        observation = surface.observe()
+        radios = [e for e in observation.interactive() if e.role == "radio"]
+        assert {e.label for e in radios} == {"Mail", "Electronic"}
+
+        surface.click(labelled(observation, "Electronic"))
+        assert surface.page.locator('input[value="Electronic"]').is_checked()
+        assert not surface.page.locator('input[value="Mail"]').is_checked()
+        assert surface.last_strategy.startswith("label:")
+
+    def test_the_whole_sub_account_form_can_be_filled(self, surface, live_server):
+        """The flow open_sub_account will be recorded against — a select, radios,
+        a checkbox and two text fields, none of them with a label element."""
+        sign_in(surface, live_server)
+        surface.navigate(f"{live_server}/member/12345/sub-account/new")
+        observation = surface.observe()
+        surface.type(labelled(observation, "Account type"), "Holiday Club")
+        surface.type(labelled(observation, "Account nickname"), "Vacation fund")
+        surface.type(labelled(observation, "Initial deposit"), "150.00")
+        surface.type(labelled(observation, "Funding source"), "Cash at branch")
+        surface.click(labelled(observation, "Mail"))
+        surface.click(labelled(observation, "Review"))
+        assert surface.text_present("Confirm Sub-Account")
 
     def test_stale_coordinates_are_refused(self, surface, live_server):
         """Never click blind: if the recorded text is not near the point any more,

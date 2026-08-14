@@ -40,10 +40,17 @@ CLICK = {
 TYPE = {
     "name": "type",
     "description": (
-        "Type text into one element. For credentials, do NOT invent or guess a value: "
-        "type the literal token {secrets.operator_id} or {secrets.operator_password}. "
-        "The executor substitutes the real value at the keystroke; you never see it, "
-        "and it is never recorded."
+        "Set the value of one element. This is the ONLY way to set a value — it "
+        "covers every kind of control, not just text boxes:\n"
+        "  - textbox: types the text.\n"
+        "  - select (a dropdown): chooses the option with that text. Do NOT click a "
+        "dropdown to open it; clicking will not work. Send `type` once with the "
+        "option you want, e.g. text='Holiday Club'.\n"
+        "  - checkbox or radio: 'yes' ticks it, 'no' clears it. Clicking works too.\n"
+        "For credentials, do NOT invent or guess a value: type the literal token "
+        "{secrets.operator_id} or {secrets.operator_password}. The executor "
+        "substitutes the real value at the keystroke; you never see it, and it is "
+        "never recorded."
     ),
     "input_schema": {
         "type": "object",
@@ -113,11 +120,14 @@ DONE = {
             "success_evidence": {
                 "type": "string",
                 "description": (
-                    "A SHORT contiguous phrase copied character-for-character from the "
-                    "element list — one label or one value, e.g. 'Member Profile' or "
-                    "'$4,523.18'. Matched literally against the live page and kept as the "
-                    "capability's permanent success checkpoint. Do NOT describe the page "
-                    "or join several cells into a sentence; a description is rejected."
+                    "A SHORT phrase copied character-for-character from the element list, "
+                    "naming the page or end state you reached — e.g. 'Member Profile' or "
+                    "'Sub-account opened'. It becomes the capability's permanent success "
+                    "checkpoint, so it must be text that would still be on screen if this "
+                    "flow ran with different inputs. Do NOT use a value you read (a "
+                    "balance, a name, an account number): those change per run and the "
+                    "checkpoint would only ever pass for this one. Do NOT describe the "
+                    "page instead of quoting it. Both are rejected."
                 ),
             },
         },

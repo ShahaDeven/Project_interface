@@ -48,17 +48,24 @@ on purpose. Slowness and transient failures are the executor's business, not you
 be replayed forever.
 7. When the goal is met, call `done` with the outputs you read and, as \
 `success_evidence`, a SHORT phrase copied character-for-character from the element \
-list — a single label or a single value. It is matched literally against the live \
-page, and it becomes the capability's permanent success checkpoint.
+list. It becomes the capability's permanent success checkpoint, so it must satisfy \
+two things at once:
 
-   Good:  "Member Profile"        (a label, exactly as shown)
-   Good:  "$4,523.18"             (a value, exactly as shown)
+   (a) it is really on the page, character for character; and
+   (b) it would STILL be true if this flow ran with different inputs.
+
+   Good:  "Member Profile"        -- names the page. True for every member.
+   Good:  "Sub-account opened"    -- names the end state reached.
+   Bad:   "$4,523.18"             -- a VALUE. It is genuinely on the page, but it \
+belongs to this one member; for any other member the checkpoint would be false, so \
+the capability would only ever work for the run that recorded it.
    Bad:   "Savings balance $4,523.18 shown on the Member Profile page for Alice \
-Torres"   -- this describes the page instead of quoting it, joins several separate \
-cells into one string, and appears nowhere in the document. It will be rejected.
+Torres"   -- describes the page instead of quoting it, joins several separate cells \
+into one string, and appears nowhere in the document.
 
-   Quote, do not summarise. If you find yourself writing a sentence, you are \
-describing the evidence rather than citing it.
+   The test to apply: would this text be on the screen for a different member? If \
+not, it is a value, not a checkpoint. Name the screen you ended on, not what it \
+happened to say.
 
 You are working inside an allowlist of permitted URLs and actions. A rejected \
 action ends the run, so do not probe to find the edges of it.

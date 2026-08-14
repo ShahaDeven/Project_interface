@@ -126,3 +126,50 @@ def sub_account_number(member_id, account_type):
     """Deterministic so the mutation flow produces reproducible evidence."""
     seq = sum(ord(c) for c in account_type) % 97
     return "SA-{}-{:02d}".format(member_id, seq)
+
+
+# --------------------------------------------------------- opened accounts --
+#
+# Sub-accounts opened during a session, held in process memory. Deliberately not a
+# database: what the prop has to demonstrate is that an irreversible step really
+# changed something a later page can see, and memory is enough for that. Cleared on
+# restart, so the seeded data stays deterministic for evidence runs — a demo starts
+# from a known state by starting the server.
+
+_SUB_ACCOUNTS = {}
+
+FUNDING_FROM_SAVINGS = "Transfer from primary savings"
+
+
+def record_sub_account(member_id, account_type, nickname, deposit, funding):
+    record = {
+        "number": sub_account_number(member_id, account_type),
+        "account_type": account_type,
+        "nickname": nickname,
+        "deposit": deposit,
+        "funding": funding,
+    }
+    _SUB_ACCOUNTS.setdefault(member_id, []).append(record)
+    return record
+
+
+def sub_accounts_for(member_id):
+    return list(_SUB_ACCOUNTS.get(member_id, []))
+
+
+def reset_sub_accounts():
+    """Used by tests, so state cannot leak between them."""
+    _SUB_ACCOUNTS.clear()
+
+
+def effective_balance(member):
+    """Savings, less anything moved out of it to open a sub-account.
+
+    Only 'Transfer from primary savings' touches the figure — cash at the branch
+    and an external transfer fund the new account from elsewhere, so the member's
+    savings are untouched. That is the honest accounting, and it means the number
+    on the profile changes for some funding choices and not others.
+    """
+    drawn = sum(account["deposit"] for account in sub_accounts_for(member["id"])
+                if account["funding"] == FUNDING_FROM_SAVINGS)
+    return member["savings_balance"] - drawn

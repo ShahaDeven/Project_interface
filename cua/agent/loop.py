@@ -23,6 +23,7 @@ most recent two are kept; older ones become a one-line placeholder.
 
 import base64
 import time
+import traceback
 from dataclasses import dataclass, field
 
 from .. import config
@@ -71,9 +72,14 @@ class DiscoveryLoop:
         self.llm_call_count = 0
         self.evidence_rejections = 0
         self.steps = []
+        self.goal = ""
         # Values as read, kept in memory only: they reach the result envelope,
         # which is caller-bound, and never the step trace.
         self.outputs = {}
+        # Everything observed to depend on this run's inputs — values read from the
+        # page, and values typed that came from the goal. A success checkpoint may
+        # not contain any of them.
+        self.varying_values = set()
 
     # ------------------------------------------------------------- helpers --
 
@@ -163,6 +169,7 @@ class DiscoveryLoop:
     def run(self, goal, base_url):
         started = time.monotonic()
         started_at = utc_now()
+        self.goal = goal
         self.evidence.trace("run_started", mode="discovery", goal=goal,
                             base_url=base_url, model=self.model)
 
@@ -197,6 +204,18 @@ class DiscoveryLoop:
             except TargetNotFound as missing:
                 outcome = self._fail(step_number, call.name,
                                      "a resolvable target", str(missing))
+                break
+            except Exception as error:  # noqa: BLE001 - see below
+                # Anything the surface throws becomes a HARD_FAILURE with
+                # forensics, never a traceback out of the CLI. A run that dies
+                # ungracefully leaves no result envelope, so the caller cannot tell
+                # a crashed automation from one that never started — and §7 exists
+                # precisely so every run answers that question. The traceback is
+                # kept in the evidence directory rather than discarded.
+                self.evidence.write_text(
+                    "failure_traceback.txt", traceback.format_exc())
+                outcome = self._fail(step_number, call.name, "the action to complete",
+                                     f"{type(error).__name__}: {error}")
                 break
 
             if outcome is not None:
@@ -252,11 +271,17 @@ class DiscoveryLoop:
                 # The substitution happens here and nowhere earlier: the trace
                 # below records `typed`, which still holds the token.
                 self.surface.type(element, config.resolve_secrets(typed))
+                if not config.secret_names_in(typed) and typed and typed in self.goal:
+                    # Came from the goal, so it is a parameter of this capability
+                    # and will differ on the next invocation.
+                    self.varying_values.add(typed)
                 self._record(step_number, "type", params, element=element, value=typed)
                 return None, None
 
             value = self.surface.read(element)
             self.outputs[params["label"]] = value
+            if value:
+                self.varying_values.add(value)
             # The figure itself goes to the result envelope, which is caller-bound.
             # The trace gets its shape and a masked form (§8) — enough to type the
             # output in the artifact, without committing a balance to evidence.
@@ -267,7 +292,8 @@ class DiscoveryLoop:
 
         if name == "done":
             evidence_text = params["success_evidence"]
-            verified = self.surface.text_present(evidence_text)
+            problem = self._evidence_problem(evidence_text)
+            verified = problem is None
             self._record(step_number, "done", params, verified=verified)
 
             if not verified:
@@ -282,19 +308,13 @@ class DiscoveryLoop:
                 # literal match.
                 self.evidence_rejections += 1
                 self.evidence.trace("success_evidence_rejected", step=step_number,
-                                    claimed=evidence_text,
+                                    claimed=evidence_text, why=problem["why"],
                                     attempt=self.evidence_rejections)
                 if self.evidence_rejections > MAX_EVIDENCE_CORRECTIONS:
                     return self._fail(step_number, "read",
-                                      f"success evidence {evidence_text!r} visible on the page",
-                                      "the claimed evidence was not found"), None
-                return None, (
-                    f"Rejected. The success_evidence you gave is not on the page:\n"
-                    f"  {evidence_text!r}\n"
-                    f"That is a description, not a quotation. Call `done` again with a "
-                    f"SHORT contiguous phrase copied character-for-character from the "
-                    f"element list below — a single label or a single value, not several "
-                    f"facts joined together.")
+                                      f"a stable success checkpoint, verified on the page",
+                                      problem["observed"]), None
+                return None, problem["correction"]
 
             # success_evidence is recorded because it becomes the artifact's
             # success checkpoint; the agent's own `outputs` are not, since the
@@ -311,6 +331,54 @@ class DiscoveryLoop:
             return {"kind": "stuck", "step": step_number, "params": params}, None
 
         raise ValueError(f"unknown tool {name!r}")
+
+    def _evidence_problem(self, text):
+        """Why this success evidence cannot be the capability's checkpoint, if so.
+
+        Two ways to fail, and the second is the one that bites silently.
+
+        *Not present* — the agent described the page instead of quoting it. Caught
+        by looking at the page.
+
+        *Varies with the input* — the agent quoted something real, but quoted a
+        **value**: the balance it just read, or the member number it was given. That
+        passes a presence check perfectly and produces a capability that succeeds
+        only for the run that recorded it, failing for every other input with no
+        obvious cause. So any text containing a value this run read or was handed is
+        refused, whatever the page says.
+
+        A checkpoint must be true for every valid input, not just this one.
+        """
+        normalised = " ".join((text or "").split())
+        for value in self.varying_values:
+            varying = " ".join(value.split())
+            if varying and varying in normalised:
+                return {
+                    "why": "varies_with_input",
+                    "observed": (f"the claimed evidence contains {varying!r}, which is a "
+                                 f"value this run read or was given"),
+                    "correction": (
+                        f"Rejected. Your success_evidence contains {varying!r}:\n"
+                        f"  {text!r}\n"
+                        f"That is a VALUE — it belongs to this particular run and would be "
+                        f"false for any other input, so it cannot be the capability's "
+                        f"permanent checkpoint. Call `done` again quoting text that names "
+                        f"the page or end state you reached and would be on screen "
+                        f"whatever the inputs were."),
+                }
+
+        if not self.surface.text_present(text):
+            return {
+                "why": "not_present",
+                "observed": "the claimed evidence was not found on the page",
+                "correction": (
+                    f"Rejected. The success_evidence you gave is not on the page:\n"
+                    f"  {text!r}\n"
+                    f"That is a description, not a quotation. Call `done` again with a "
+                    f"SHORT contiguous phrase copied character-for-character from the "
+                    f"element list below, naming the page or state you ended on."),
+            }
+        return None
 
     def _after(self):
         """State immediately after a page-transitioning action.

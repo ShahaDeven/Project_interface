@@ -1,0 +1,245 @@
+{
+  "schema_version": "1.0",
+  "capability": {
+    "name": "lookup_member_balance",
+    "version": "1.0.0",
+    "description": "Recorded from the goal: look up member {inputs.member_number} and read their savings balance. Returns savings_balance.",
+    "recorded_against": {
+      "app": "legacy-cu-portal",
+      "app_fingerprint": "legacy-cu-portal@4.3.0",
+      "recorded_at": "2026-08-14T16:32:43Z",
+      "discovery_run_id": "run_20260814_123223"
+    },
+    "requires_secrets": [
+      "operator_id",
+      "operator_password"
+    ]
+  },
+  "inputs": {
+    "member_number": {
+      "type": "string",
+      "required": true,
+      "description": "Value for the 'Member number' field.",
+      "pattern": "^[0-9]{5}$"
+    }
+  },
+  "outputs": {
+    "savings_balance": {
+      "type": "number",
+      "description": "Value shown for 'Savings balance'.",
+      "source_step": 7,
+      "parse": "currency"
+    }
+  },
+  "expected_outcomes": [
+    {
+      "code": "MEMBER_NOT_FOUND",
+      "detect": {
+        "condition": "text_present",
+        "value": "No member matches this number"
+      },
+      "meaning": "Legitimate result: no member holds that number. The caller decides whether to re-prompt or refer the case. Not a failure of the automation."
+    },
+    {
+      "code": "PERMISSION_DENIED",
+      "detect": {
+        "condition": "text_present",
+        "value": "Member outside your region"
+      },
+      "meaning": "The operator's region scope excludes this member. A correct answer about access rather than a broken run — the caller may route the request to a differently-scoped operator."
+    }
+  ],
+  "steps": [
+    {
+      "id": 1,
+      "action": "navigate",
+      "risk": "read_only",
+      "reason": "Navigate to the application start page",
+      "url": "{base_url}",
+      "checkpoint": {
+        "condition": "text_present",
+        "value": "Operator Login"
+      }
+    },
+    {
+      "id": 2,
+      "action": "type",
+      "risk": "read_only",
+      "reason": "Enter operator ID",
+      "target": {
+        "strategies": [
+          {
+            "kind": "label",
+            "value": "Operator ID",
+            "role": "textbox"
+          },
+          {
+            "kind": "structural",
+            "value": "body > table > tbody > tr:nth-of-type(3) > td > table > tbody > tr > td > table > tbody > tr > td > table > tbody > tr:nth-of-type(2) > td > table > tbody > tr:nth-of-type(2) > td:nth-of-type(2) > input"
+          },
+          {
+            "kind": "coordinates",
+            "value": [
+              677,
+              137
+            ],
+            "verify_text_nearby": "Operator ID"
+          }
+        ]
+      },
+      "value": "{secrets.operator_id}"
+    },
+    {
+      "id": 3,
+      "action": "type",
+      "risk": "read_only",
+      "reason": "Enter operator password",
+      "target": {
+        "strategies": [
+          {
+            "kind": "label",
+            "value": "Password",
+            "role": "password"
+          },
+          {
+            "kind": "structural",
+            "value": "body > table > tbody > tr:nth-of-type(3) > td > table > tbody > tr > td > table > tbody > tr > td > table > tbody > tr:nth-of-type(2) > td > table > tbody > tr:nth-of-type(3) > td:nth-of-type(2) > input"
+          },
+          {
+            "kind": "coordinates",
+            "value": [
+              677,
+              172
+            ],
+            "verify_text_nearby": "Password"
+          }
+        ]
+      },
+      "value": "{secrets.operator_password}"
+    },
+    {
+      "id": 4,
+      "action": "click",
+      "risk": "read_only",
+      "reason": "Sign on with entered credentials",
+      "target": {
+        "strategies": [
+          {
+            "kind": "label",
+            "value": "Sign On",
+            "role": "button"
+          },
+          {
+            "kind": "structural",
+            "value": "body > table > tbody > tr:nth-of-type(3) > td > table > tbody > tr > td > table > tbody > tr > td > table > tbody > tr:nth-of-type(2) > td > table > tbody > tr:nth-of-type(5) > td:nth-of-type(2) > input"
+          },
+          {
+            "kind": "coordinates",
+            "value": [
+              618,
+              240
+            ],
+            "verify_text_nearby": "Sign On"
+          }
+        ]
+      },
+      "checkpoint": {
+        "condition": "text_present",
+        "value": "Member Lookup"
+      }
+    },
+    {
+      "id": 5,
+      "action": "type",
+      "risk": "read_only",
+      "reason": "Enter the member number to look up",
+      "target": {
+        "strategies": [
+          {
+            "kind": "label",
+            "value": "Member number",
+            "role": "textbox"
+          },
+          {
+            "kind": "structural",
+            "value": "body > table > tbody > tr:nth-of-type(3) > td > table > tbody > tr > td > table > tbody > tr:nth-of-type(2) > td > table > tbody > tr:nth-of-type(2) > td:nth-of-type(2) > input:nth-of-type(1)"
+          },
+          {
+            "kind": "coordinates",
+            "value": [
+              249,
+              140
+            ],
+            "verify_text_nearby": "Member number"
+          }
+        ]
+      },
+      "value": "{inputs.member_number}"
+    },
+    {
+      "id": 6,
+      "action": "click",
+      "risk": "read_only",
+      "reason": "Search for member {inputs.member_number}",
+      "target": {
+        "strategies": [
+          {
+            "kind": "label",
+            "value": "Look Up",
+            "role": "button"
+          },
+          {
+            "kind": "structural",
+            "value": "body > table > tbody > tr:nth-of-type(3) > td > table > tbody > tr > td > table > tbody > tr:nth-of-type(2) > td > table > tbody > tr:nth-of-type(2) > td:nth-of-type(2) > input:nth-of-type(2)"
+          },
+          {
+            "kind": "coordinates",
+            "value": [
+              358,
+              140
+            ],
+            "verify_text_nearby": "Look Up"
+          }
+        ]
+      },
+      "checkpoint": {
+        "condition": "text_present",
+        "value": "Member Profile"
+      }
+    },
+    {
+      "id": 7,
+      "action": "read",
+      "risk": "read_only",
+      "reason": "Read the savings balance for member {inputs.member_number}",
+      "target": {
+        "strategies": [
+          {
+            "kind": "label",
+            "value": "Savings balance",
+            "role": "cell"
+          },
+          {
+            "kind": "structural",
+            "value": "body > table > tbody > tr:nth-of-type(3) > td > table > tbody > tr > td > table > tbody > tr:nth-of-type(2) > td > table > tbody > tr:nth-of-type(3) > td:nth-of-type(2)"
+          },
+          {
+            "kind": "coordinates",
+            "value": [
+              285,
+              163
+            ],
+            "verify_text_nearby": "Savings balance"
+          }
+        ]
+      },
+      "output": "savings_balance"
+    }
+  ],
+  "success": {
+    "checkpoint": {
+      "condition": "text_present",
+      "value": "Member Profile"
+    }
+  }
+}
