@@ -1,0 +1,162 @@
+{
+  "schema_version": "1.0",
+  "capability": {
+    "name": "lookup_member_balance",
+    "version": "1.0.0",
+    "description": "Log into the operator portal, search a member by number, and return their name and savings balance.",
+    "requires_secrets": ["operator_id", "operator_password"],
+    "recorded_against": {
+      "app": "legacy-cu-portal",
+      "app_fingerprint": "legacy-cu-portal@4.2.1",
+      "recorded_at": "2026-08-14T09:30:12Z",
+      "discovery_run_id": "run_20260814_093012"
+    }
+  },
+  "inputs": {
+    "member_id": {
+      "type": "string",
+      "required": true,
+      "pattern": "^[0-9]{5}$",
+      "description": "Five digit member number as printed on the passbook."
+    }
+  },
+  "outputs": {
+    "member_name": {
+      "type": "string",
+      "description": "Full name on the member record.",
+      "source_step": 7
+    },
+    "savings_balance": {
+      "type": "number",
+      "description": "Current savings balance in USD.",
+      "source_step": 8,
+      "parse": "currency"
+    }
+  },
+  "expected_outcomes": [
+    {
+      "code": "MEMBER_NOT_FOUND",
+      "detect": { "condition": "text_present", "value": "No member matches this number" },
+      "meaning": "Legitimate result: no member holds that number. The caller decides whether to re-prompt. Not a failure."
+    },
+    {
+      "code": "PERMISSION_DENIED",
+      "detect": { "condition": "text_present", "value": "Member outside your region" },
+      "meaning": "The operator's region scope excludes this member. A correct answer about access, not a broken run."
+    }
+  ],
+  "steps": [
+    {
+      "id": 1,
+      "action": "navigate",
+      "reason": "Entry point; the portal redirects anything else to the login screen.",
+      "url": "{base_url}/login",
+      "risk": "read_only",
+      "checkpoint": { "condition": "text_present", "value": "Operator Login" }
+    },
+    {
+      "id": 2,
+      "action": "type",
+      "reason": "Operator identifier.",
+      "target": {
+        "strategies": [
+          { "kind": "label", "value": "Operator ID", "role": "textbox" },
+          { "kind": "structural", "value": "form table tr:nth-of-type(2) input" }
+        ]
+      },
+      "value": "{secrets.operator_id}",
+      "risk": "read_only"
+    },
+    {
+      "id": 3,
+      "action": "type",
+      "reason": "Operator password. Never stored in the artifact.",
+      "target": {
+        "strategies": [
+          { "kind": "label", "value": "Password", "role": "textbox" },
+          { "kind": "structural", "value": "form table tr:nth-of-type(3) input" }
+        ]
+      },
+      "value": "{secrets.operator_password}",
+      "risk": "read_only"
+    },
+    {
+      "id": 4,
+      "action": "click",
+      "reason": "Submit the sign-on form.",
+      "target": {
+        "strategies": [
+          { "kind": "label", "value": "Sign On", "role": "button" },
+          { "kind": "structural", "value": "form input[type=submit]" },
+          {
+            "kind": "coordinates",
+            "value": [825, 233],
+            "verify_text_nearby": "Sign On"
+          }
+        ]
+      },
+      "risk": "read_only",
+      "checkpoint": { "condition": "text_present", "value": "Member Lookup" }
+    },
+    {
+      "id": 5,
+      "action": "type",
+      "reason": "The member number the caller asked about.",
+      "target": {
+        "strategies": [
+          { "kind": "label", "value": "Member number", "role": "textbox" },
+          { "kind": "structural", "value": "form table tr:nth-of-type(2) input" }
+        ]
+      },
+      "value": "{inputs.member_id}",
+      "risk": "read_only"
+    },
+    {
+      "id": 6,
+      "action": "click",
+      "reason": "Run the lookup.",
+      "target": {
+        "strategies": [
+          { "kind": "label", "value": "Look Up", "role": "button" },
+          { "kind": "structural", "value": "form input[type=submit]" },
+          {
+            "kind": "coordinates",
+            "value": [412, 288],
+            "verify_text_nearby": "Member number"
+          }
+        ]
+      },
+      "risk": "read_only",
+      "checkpoint": { "condition": "text_present", "value": "Member Profile" }
+    },
+    {
+      "id": 7,
+      "action": "read",
+      "reason": "Member name, adjacent to its label cell.",
+      "target": {
+        "strategies": [
+          { "kind": "label", "value": "Member name" },
+          { "kind": "structural", "value": "table tr:nth-of-type(1) td:nth-of-type(2)" }
+        ]
+      },
+      "output": "member_name",
+      "risk": "read_only"
+    },
+    {
+      "id": 8,
+      "action": "read",
+      "reason": "Savings balance, adjacent to its label cell.",
+      "target": {
+        "strategies": [
+          { "kind": "label", "value": "Savings balance" },
+          { "kind": "structural", "value": "table tr:nth-of-type(3) td:nth-of-type(2)" }
+        ]
+      },
+      "output": "savings_balance",
+      "risk": "read_only"
+    }
+  ],
+  "success": {
+    "checkpoint": { "condition": "text_present", "value": "Member Profile" }
+  }
+}

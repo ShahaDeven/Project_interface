@@ -1,0 +1,207 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:cua:result:1.0",
+  "title": "Run result envelope",
+  "description": "What every run returns, discovery or replay. A common envelope with a status-specific payload, machine-readable throughout — the caller is an AI agent, not a human reading prose. The four statuses are the whole contract: a caller that handles all four has handled everything the system can do.",
+
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "run_id",
+    "capability",
+    "capability_version",
+    "mode",
+    "status",
+    "inputs",
+    "started_at",
+    "ended_at",
+    "steps_completed",
+    "steps_total",
+    "llm_call_count",
+    "evidence_path",
+    "payload"
+  ],
+
+  "properties": {
+    "run_id": { "type": "string", "pattern": "^run_[A-Za-z0-9_]+$" },
+    "capability": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
+    "capability_version": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
+
+    "mode": {
+      "enum": ["discovery", "replay"],
+      "description": "Which path produced this result. Load-bearing: replay is constrained below to zero model calls, so the central claim of the system is enforced by the contract rather than asserted in prose."
+    },
+
+    "status": {
+      "enum": ["SUCCESS", "BUSINESS_OUTCOME", "NEEDS_INTERVENTION", "HARD_FAILURE"],
+      "description": "Recoverable conditions are deliberately absent: a retried slow load or a dismissed known interstitial is logged in the trace and never becomes a terminal status."
+    },
+
+    "inputs": { "type": "object", "description": "Parameters this run was invoked with, echoed back so a result is self-contained." },
+
+    "started_at": { "type": "string", "format": "date-time" },
+    "ended_at": { "type": "string", "format": "date-time" },
+
+    "steps_completed": { "type": "integer", "minimum": 0 },
+    "steps_total": { "type": "integer", "minimum": 0 },
+
+    "llm_call_count": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Counted, not estimated. Asserted zero on every replay."
+    },
+
+    "evidence_path": { "type": "string", "minLength": 1 },
+
+    "app_fingerprint_observed": {
+      "type": "string",
+      "description": "What the app reported at run time. Compared against the artifact's recorded value; absent means the app did not report one (a crashed app cannot), which is 'unknown', never 'unchanged'."
+    },
+    "drift_warning": {
+      "type": "string",
+      "description": "Present when the observed fingerprint differs from the recorded one. A warning, not a failure: most app changes do not touch the flow that was recorded."
+    },
+
+    "payload": { "type": "object" },
+
+    "intervention_record": {
+      "$ref": "#/$defs/intervention_record",
+      "description": "Present on the final result of any run that paused for a human, whatever its terminal status."
+    }
+  },
+
+  "allOf": [
+    {
+      "if": { "properties": { "mode": { "const": "replay" } }, "required": ["mode"] },
+      "then": {
+        "properties": { "llm_call_count": { "const": 0 } },
+        "description": "Replay is the production path and takes no model in the decision loop. A replay result carrying a non-zero count is not a warning, it is an invalid document."
+      }
+    },
+    {
+      "if": { "properties": { "status": { "const": "SUCCESS" } }, "required": ["status"] },
+      "then": { "properties": { "payload": { "$ref": "#/$defs/success_payload" } } }
+    },
+    {
+      "if": { "properties": { "status": { "const": "BUSINESS_OUTCOME" } }, "required": ["status"] },
+      "then": { "properties": { "payload": { "$ref": "#/$defs/business_outcome_payload" } } }
+    },
+    {
+      "if": { "properties": { "status": { "const": "NEEDS_INTERVENTION" } }, "required": ["status"] },
+      "then": { "properties": { "payload": { "$ref": "#/$defs/needs_intervention_payload" } } }
+    },
+    {
+      "if": { "properties": { "status": { "const": "HARD_FAILURE" } }, "required": ["status"] },
+      "then": { "properties": { "payload": { "$ref": "#/$defs/hard_failure_payload" } } }
+    }
+  ],
+
+  "$defs": {
+    "success_payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["outputs", "checkpoint_verified"],
+      "description": "Typed outputs exactly as the artifact declared them. No prose.",
+      "properties": {
+        "outputs": { "type": "object" },
+        "checkpoint_verified": {
+          "const": true,
+          "description": "SUCCESS is only reachable with a verified checkpoint, so this can only be true. Kept explicit so the caller sees the claim rather than inferring it."
+        }
+      }
+    },
+
+    "business_outcome_payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["outcome_code", "detected_at_step", "detail"],
+      "description": "A first-class answer the caller branches on, not an error.",
+      "properties": {
+        "outcome_code": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]*$" },
+        "detected_at_step": { "type": "integer", "minimum": 1 },
+        "detail": { "type": "string", "minLength": 1 },
+        "evidence": { "type": "string" }
+      }
+    },
+
+    "needs_intervention_payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["reason", "detail", "paused_at_step", "session_id", "requested_action", "control"],
+      "description": "A live pause, forward-looking: someone must act now. Carries enough context to act without reading the trace.",
+      "properties": {
+        "reason": {
+          "enum": ["UNEXPECTED_DIALOG", "SESSION_EXPIRED", "IRREVERSIBLE_STEP", "AGENT_STUCK"],
+          "description": "Why control was handed over. AGENT_STUCK is discovery-only; the rest are replay."
+        },
+        "detail": { "type": "string", "minLength": 1 },
+        "paused_at_step": { "type": "integer", "minimum": 1 },
+        "screenshot": { "type": "string" },
+        "session_id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The live browser session the human takes over. Required: the human operates the session the automation was using, never a fresh one."
+        },
+        "requested_action": { "type": "string", "minLength": 1, "description": "What the operator is being asked to do, and what state means it is done." },
+        "control": { "const": "HUMAN", "description": "Single writer at a time, tracked explicitly." }
+      }
+    },
+
+    "hard_failure_payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["failed_at_step", "action_attempted", "expected", "observed"],
+      "description": "Maximum debuggability, and deliberately no remediation field. If the engine knew the fix it would be a recoverable condition, so a suggestion here would be a guess wearing the costume of an instruction — additionalProperties:false makes adding one a schema error.",
+      "properties": {
+        "failed_at_step": { "type": "integer", "minimum": 1 },
+        "action_attempted": { "enum": ["navigate", "click", "type", "read"] },
+        "expected": { "type": "string", "minLength": 1 },
+        "observed": { "type": "string", "minLength": 1 },
+        "strategies_tried": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Every locator strategy attempted, in order. Distinguishes 'the element moved' from 'the page was wrong'."
+        },
+        "screenshot": { "type": "string" },
+        "dom_snapshot": { "type": "string" }
+      }
+    },
+
+    "intervention_record": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["paused_at_step", "control_returned_at", "human_actions", "post_resume_checkpoint"],
+      "description": "What happened while a human held control. Written on resume so the audit trail covers the manual segment too, not just the automated one.",
+      "properties": {
+        "operator": { "type": "string", "description": "Who took over." },
+        "paused_at_step": { "type": "integer", "minimum": 1 },
+        "control_returned_at": { "type": "string", "format": "date-time" },
+        "human_actions": {
+          "type": "array",
+          "description": "Observed state transitions while control was HUMAN. Captured, not self-reported.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["recorded_at", "url", "summary"],
+            "properties": {
+              "recorded_at": { "type": "string", "format": "date-time" },
+              "url": { "type": "string" },
+              "summary": { "type": "string", "minLength": 1 }
+            }
+          }
+        },
+        "post_resume_checkpoint": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["condition", "value", "passed"],
+          "description": "Re-verified before continuing. Never blind-resume: if this fails the run pauses again rather than acting on an assumed state.",
+          "properties": {
+            "condition": { "enum": ["text_present", "url_matches"] },
+            "value": { "type": "string", "minLength": 1 },
+            "passed": { "type": "boolean" }
+          }
+        }
+      }
+    }
+  }
+}

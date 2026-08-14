@@ -1,0 +1,298 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:cua:artifact:1.0",
+  "title": "Capability artifact",
+  "description": "A recorded, parameterised capability. Discovery compiles a trace into one of these; replay executes it with no model in the loop. The schema is the instruction set: replay can only do what a step can express, so anything absent here is deliberately out of scope. Validated on save and on load.",
+
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "capability",
+    "inputs",
+    "outputs",
+    "expected_outcomes",
+    "steps",
+    "success"
+  ],
+
+  "properties": {
+    "schema_version": {
+      "const": "1.0",
+      "description": "Format version of this file. Distinct from capability.version, which versions the recording."
+    },
+
+    "capability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "version", "description", "recorded_against"],
+      "properties": {
+        "name": { "$ref": "#/$defs/identifier" },
+        "version": {
+          "type": "string",
+          "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$",
+          "description": "Semver of the recording. patch: re-recorded same flow. minor: new optional outputs. major: inputs or outputs changed."
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1,
+          "description": "What this capability does, in one sentence. Required because a calling agent reads it to decide whether to invoke."
+        },
+        "requires_secrets": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/identifier" },
+          "uniqueItems": true,
+          "description": "Names of credentials this flow needs, resolved from the environment at run time. Names only — values never enter an artifact (see policy: redaction). A step references one as {secrets.name}."
+        },
+        "recorded_against": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["app", "app_fingerprint", "recorded_at", "discovery_run_id"],
+          "properties": {
+            "app": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Stable routing key for the application. Never changes across versions; groups capabilities and scopes recovery routines."
+            },
+            "app_fingerprint": {
+              "type": "string",
+              "pattern": "^[a-z0-9][a-z0-9-]*@\\S+$",
+              "description": "app@build, scraped from the application itself at discovery time. Expected to change; a mismatch at replay raises a drift warning."
+            },
+            "recorded_at": { "type": "string", "format": "date-time" },
+            "discovery_run_id": {
+              "type": "string",
+              "pattern": "^run_[A-Za-z0-9_]+$",
+              "description": "Back-reference to the evidence directory for the discovery run that produced this artifact."
+            }
+          }
+        }
+      }
+    },
+
+    "inputs": {
+      "type": "object",
+      "description": "Parameters the calling agent supplies per invocation. A step references one as {inputs.name}.",
+      "propertyNames": { "$ref": "#/$defs/identifier" },
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["type", "required", "description"],
+        "properties": {
+          "type": { "enum": ["string", "number", "integer", "boolean"] },
+          "required": { "type": "boolean" },
+          "description": { "type": "string", "minLength": 1 },
+          "pattern": {
+            "type": "string",
+            "description": "Regex the value must match. Checked before the browser opens, so a malformed input fails cheaply instead of halfway through a mutation."
+          },
+          "enum": { "type": "array", "minItems": 1 },
+          "default": {}
+        }
+      }
+    },
+
+    "outputs": {
+      "type": "object",
+      "description": "Typed values this capability returns. Each is filled by exactly one read step.",
+      "propertyNames": { "$ref": "#/$defs/identifier" },
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["type", "description", "source_step"],
+        "properties": {
+          "type": { "enum": ["string", "number", "integer", "boolean"] },
+          "description": { "type": "string", "minLength": 1 },
+          "source_step": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "id of the read step that produces this value. Referential integrity is checked by the validator, which JSON Schema cannot express."
+          },
+          "parse": {
+            "enum": ["text", "currency", "number", "integer"],
+            "default": "text",
+            "description": "How to coerce the observed string into `type`. 'currency' strips symbols and separators."
+          }
+        }
+      }
+    },
+
+    "expected_outcomes": {
+      "type": "array",
+      "description": "Business outcomes declared up front, not discovered at run time. This is what keeps 'no such member' from ever being a crash. An empty array is a deliberate claim that this flow has no non-failure outcomes — make it on purpose.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["code", "detect", "meaning"],
+        "properties": {
+          "code": {
+            "type": "string",
+            "pattern": "^[A-Z][A-Z0-9_]*$",
+            "description": "Stable code the calling agent branches on."
+          },
+          "detect": { "$ref": "#/$defs/condition" },
+          "meaning": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Why this is a legitimate result rather than a failure. Required: if you cannot say why, it is a failure."
+          }
+        }
+      }
+    },
+
+    "steps": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/step" }
+    },
+
+    "success": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["checkpoint"],
+      "properties": {
+        "checkpoint": {
+          "$ref": "#/$defs/condition",
+          "description": "The success evidence the agent named at discovery time. Replay reports SUCCESS only if this holds."
+        }
+      }
+    }
+  },
+
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*$",
+      "description": "snake_case name, safe to use as a key in any calling language."
+    },
+
+    "condition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["condition", "value"],
+      "description": "A cheap, deterministic assertion about observed state. Two kinds only: page content, and where we landed — the two things a step can assert without re-reasoning about the UI.",
+      "properties": {
+        "condition": { "enum": ["text_present", "url_matches"] },
+        "value": { "type": "string", "minLength": 1 }
+      }
+    },
+
+    "strategy": {
+      "description": "One way to locate a target. Recorded in fallback order; replay tries each in turn and logs which one won, which is drift telemetry for free.",
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "value"],
+          "properties": {
+            "kind": { "const": "label" },
+            "value": { "type": "string", "minLength": 1 },
+            "role": { "type": "string", "description": "Interactive role (textbox, button, link...) to disambiguate a repeated label." }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "value"],
+          "properties": {
+            "kind": { "const": "structural" },
+            "value": { "type": "string", "minLength": 1, "description": "CSS or XPath-ish path. Exact today, brittle to layout edits." }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "value", "verify_text_nearby"],
+          "properties": {
+            "kind": { "const": "coordinates" },
+            "value": {
+              "type": "array",
+              "items": { "type": "number" },
+              "minItems": 2,
+              "maxItems": 2,
+              "description": "Bounding-box centre [x, y]."
+            },
+            "verify_text_nearby": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Required, not optional: never click blind. If this text is not where it was, the coordinates are stale and the strategy fails instead of clicking whatever moved there."
+            }
+          }
+        }
+      ]
+    },
+
+    "target": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["strategies"],
+      "properties": {
+        "strategies": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/strategy" },
+          "description": "Ordered by preference, most stable first."
+        },
+        "frame": {
+          "type": "string",
+          "description": "URL or path of the frame this target lives in. Absent means the main document."
+        }
+      }
+    },
+
+    "step": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "action", "risk"],
+      "description": "One replayable action. Fields are action-specific and enforced below, so a step cannot be half-formed: a navigate without a checkpoint, or a read that does not say what it fills, is invalid.",
+      "properties": {
+        "id": { "type": "integer", "minimum": 1 },
+        "action": {
+          "enum": ["navigate", "click", "type", "read"],
+          "description": "The agent's `done` and `stuck` tools are loop control, not replayable actions, so they are deliberately absent here."
+        },
+        "risk": {
+          "enum": ["read_only", "mutating", "irreversible"],
+          "description": "Required on every step. read_only auto-allows; mutating needs --approve-mutations; irreversible always pauses for a human."
+        },
+        "reason": { "type": "string", "description": "Why the agent took this step. Carried for reviewability; replay ignores it." },
+        "url": { "type": "string", "minLength": 1, "description": "navigate only. Supports {base_url}." },
+        "target": { "$ref": "#/$defs/target" },
+        "value": { "type": "string", "description": "type only. Supports {inputs.name} and {secrets.name}." },
+        "output": { "$ref": "#/$defs/identifier", "description": "read only. Which declared output this step fills." },
+        "checkpoint": { "$ref": "#/$defs/condition" }
+      },
+
+      "allOf": [
+        {
+          "if": { "properties": { "action": { "const": "navigate" } }, "required": ["action"] },
+          "then": {
+            "required": ["url", "checkpoint"],
+            "properties": { "target": false, "value": false, "output": false }
+          }
+        },
+        {
+          "if": { "properties": { "action": { "const": "click" } }, "required": ["action"] },
+          "then": {
+            "required": ["target", "checkpoint"],
+            "properties": { "url": false, "value": false, "output": false }
+          }
+        },
+        {
+          "if": { "properties": { "action": { "const": "type" } }, "required": ["action"] },
+          "then": {
+            "required": ["target", "value"],
+            "properties": { "url": false, "output": false }
+          }
+        },
+        {
+          "if": { "properties": { "action": { "const": "read" } }, "required": ["action"] },
+          "then": {
+            "required": ["target", "output"],
+            "properties": { "url": false, "value": false }
+          }
+        }
+      ]
+    }
+  }
+}

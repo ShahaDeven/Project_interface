@@ -15,15 +15,16 @@ README only tells you how to run things.
 
 | Piece | State |
 |---|---|
-| `target_app/` — the fake operator portal (DESIGN §2) | **done**, 73 tests |
-| `src/contracts/` — artifact + result JSON Schemas (§5, §7) | not started |
-| `src/agent/` — discovery loop (§4) | not started |
-| `src/distill/` — trace → artifact | not started |
-| `src/replay/` — the interpreter (§6) | not started |
-| `src/policy/`, `src/hitl/` — guardrails, handoff (§8, §9) | not started |
+| `target_app/` — the fake operator portal (DESIGN §2) | **done** |
+| `cua/contracts/` — artifact + result JSON Schemas (§5, §7) | **done** |
+| `cua/agent/` — discovery loop (§4) | not started |
+| `cua/distill/` — trace → artifact | not started |
+| `cua/replay/` — the interpreter (§6) | not started |
+| `cua/policy/`, `cua/hitl/` — guardrails, handoff (§8, §9) | not started |
 
-Everything below the first row is Days 2–4. The commands in
-[Coming next](#coming-next) do not work yet.
+120 tests cover what is done. Everything below the second row is Days 2–4, and the
+commands in [Coming next](#coming-next) do not work yet — they exit 2 with a
+message rather than failing obscurely.
 
 ---
 
@@ -51,10 +52,32 @@ separate ~140MB download, which is what `playwright install chromium` fetches.
 
 ---
 
+## Validate a capability contract
+
+An artifact is bytecode: replay executes it against a live system, so it is checked
+on save and again on load. You can run that check by hand:
+
+```bash
+python -m cua validate tests/fixtures/lookup_member_balance.json
+```
+
+Two layers do the work. **JSON Schema** owns shape — including action-specific rules
+that make a half-formed step impossible: a `navigate` with no checkpoint, a
+`coordinates` strategy with nothing to verify against, a `read` that does not say
+what it fills. **The validator** owns the cross-field facts JSON Schema cannot
+express: that an output's `source_step` names the read step that actually fills it,
+that `{inputs.member_id}` was declared, that step ids are contiguous. Every problem
+is reported at once rather than one per run.
+
+The fixture doubles as a worked example of the schema, recorded against the target
+app in this repo.
+
+---
+
 ## Run the target app
 
 ```bash
-python -m target_app
+python -m target_app          # or: python -m cua target_app serve
 ```
 
 Serves **http://127.0.0.1:5000**. Ctrl+C to stop.
@@ -135,7 +158,13 @@ but the artifacts recorded against it depend on it behaving exactly as specified
 ```
 target_app/           the fake portal — a prop, evaluated on nothing
   templates/          hostile markup lives here
-src/                  the system under evaluation (Days 2–4)
+cua/                  the system under evaluation
+  contracts/          JSON Schemas + validator: artifact, result envelope
+  agent/              discovery loop (Day 2)
+  distill/            trace → artifact (Day 2)
+  replay/             the interpreter (Day 3)
+  policy/             allowlist, risk gates, redaction (Day 3)
+  hitl/               pause / cede control / resume (Day 4)
 capabilities/         saved artifacts, one JSON per capability
 evidence/             per-run traces, screenshots, transcripts
 tests/

@@ -16,7 +16,7 @@ Two separate pieces of software:
 1. **Target app** (`/target_app/`) — a deliberately legacy-style fake credit union operator
    portal. A prop. Gets zero evaluation weight itself; exists so the automation has a
    realistic, controllable surface. Runs locally.
-2. **The system** (`/src/`) — what is actually evaluated. A Python CLI with two modes:
+2. **The system** (`/cua/`) — what is actually evaluated. A Python CLI with two modes:
    - **Discovery**: an LLM-driven observe → decide → act loop completes a natural-language
      goal against the target app, producing a step trace. A distiller converts the trace
      into a capability artifact.
@@ -47,7 +47,8 @@ and its schema is the instruction set.
 /REPORT.md            design write-up (their 7 headings, their order)
 /DESIGN.md            this file
 /target_app/          the fake credit union portal
-/src/
+/cua/                 the system (named for the CLI: `python -m cua`, §12)
+  executor/           surface abstraction, element distillation, waiting, actions
   agent/              discovery loop, tool definitions, prompts
   distill/            trace → artifact
   replay/             artifact interpreter, wait/retry policy, outcome scanner
@@ -110,8 +111,17 @@ so drift can be demonstrated without editing code (record at 4.2.1, replay again
 
 Per loop turn, the agent receives:
 1. A screenshot of the current viewport
-2. A numbered list of interactive elements, distilled by the executor from the live page:
+2. A numbered list of elements, distilled by the executor from the live page:
    index, role, label/nearby text, structural path, bounding box
+
+   **Not only interactive ones.** A savings balance is not clickable, so a list of
+   controls alone makes the `read` tool unusable and pushes extraction into OCR of
+   the screenshot. Text-bearing cells are elements too: a label/value pair in a
+   table row collapses into a single element that *is* the value and carries its
+   neighbour's text as the label — which is what makes `label: "Savings balance"` a
+   read target. The executor lives in `/cua/executor/` rather than under `agent/` or
+   `replay/` because both use it; if they used different machinery, a capability
+   could pass discovery and fail replay for reasons unrelated to the app.
 
 The agent responds with exactly one tool call. The executor performs it via Playwright.
 
@@ -163,6 +173,7 @@ One JSON file per capability in `/capabilities/`. Validated against
     "name": "lookup_member_balance",
     "version": "1.0.0",
     "description": "Log into the member portal, search a member by ID, return their savings balance.",
+    "requires_secrets": ["operator_id", "operator_password"],
     "recorded_against": {
       "app": "legacy-cu-portal",
       "app_fingerprint": "legacy-cu-portal@4.2.1",
@@ -194,13 +205,13 @@ One JSON file per capability in `/capabilities/`. Validated against
         { "kind": "label", "value": "Member number" },
         { "kind": "structural", "value": "form table tr:nth-of-type(1) input" },
         { "kind": "coordinates", "value": [412, 288], "verify_text_nearby": "Member number" } ] },
-      "value": "{inputs.member_id}", "risk": "read_only" }
+      "value": "{inputs.member_id}", "risk": "read_only" },
+    { "id": 5, "action": "read",
+      "target": { "strategies": [ { "kind": "label", "value": "Savings balance" } ] },
+      "output": "savings_balance", "risk": "read_only" }
   ],
   "success": {
-    "checkpoint": { "condition": "text_present", "value": "Member Profile" },
-    "extract": [
-      { "output": "savings_balance", "target": { "strategies": ["..."] }, "parse": "currency" }
-    ]
+    "checkpoint": { "condition": "text_present", "value": "Member Profile" }
   }
 }
 ```
@@ -219,6 +230,15 @@ One JSON file per capability in `/capabilities/`. Validated against
   the app itself, never hardcoded by the system — a fingerprint we author cannot
   mismatch, and a check that cannot fail is decoration.
 - `{inputs.*}` templating — the moment a recording becomes a parameterized capability
+- `{secrets.*}` templating + `requires_secrets` — a capability declares which
+  credentials it needs by *name*; values are resolved from the environment at run
+  time and never enter the file. §8's redaction rule made structural: an artifact
+  that stored a password would have to store it somewhere, and there is nowhere.
+- **Extraction lives on the step, not at the end.** A `read` step names the output
+  it fills. The alternative — extracting from a `success.extract` block after the
+  walk — cannot work: by the last step the page holding the value is usually gone.
+  `outputs.*.source_step` back-references the producing step, and the validator
+  enforces that correspondence (JSON Schema cannot express it).
 
 **Versioning:** `schema_version` = format; `capability.version` = semver of the recording
 (patch: re-record same flow; minor: new optional outputs; major: inputs/outputs change).
@@ -262,6 +282,7 @@ AI agent, not a human reading prose.
   "run_id": "run_20260814_093012",
   "capability": "lookup_member_balance",
   "capability_version": "1.0.0",
+  "mode": "discovery | replay",
   "status": "SUCCESS | BUSINESS_OUTCOME | NEEDS_INTERVENTION | HARD_FAILURE",
   "inputs": { "member_id": "12345" },
   "started_at": "...", "ended_at": "...",
@@ -271,6 +292,11 @@ AI agent, not a human reading prose.
   "payload": {}
 }
 ```
+
+`mode` is load-bearing, not bookkeeping: the schema constrains `mode: "replay"` to
+`llm_call_count: 0`, so the system's central claim is enforced by the contract
+rather than asserted in prose. A replay result carrying a model call is not a
+warning — it is an invalid document.
 
 **SUCCESS** — typed outputs exactly as declared; no prose:
 ```json

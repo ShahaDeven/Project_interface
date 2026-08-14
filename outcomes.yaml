@@ -1,0 +1,39 @@
+# Business outcomes, declared per application (DESIGN §5, §6).
+#
+# These cannot be distilled from a discovery trace, and that is the design working
+# rather than a gap: a successful run never encounters "no such member", so
+# anything inferred from it would only ever describe the happy path. Declaring
+# them up front is what keeps a legitimate result from being reported as a crash.
+#
+# Authored once per app, attached to every capability recorded against it, and
+# checked after every step during replay. A capability's author is expected to
+# prune any that its flow genuinely cannot reach.
+#
+# `meaning` is required by the schema. If you cannot say why an outcome is not a
+# failure, it is a failure.
+
+legacy-cu-portal:
+  - code: MEMBER_NOT_FOUND
+    detect:
+      condition: text_present
+      value: "No member matches this number"
+    meaning: >-
+      Legitimate result: no member holds that number. The caller decides whether to
+      re-prompt or refer the case. Not a failure of the automation.
+
+  - code: PERMISSION_DENIED
+    detect:
+      condition: text_present
+      value: "Member outside your region"
+    meaning: >-
+      The operator's region scope excludes this member. A correct answer about
+      access rather than a broken run — the caller may route the request to a
+      differently-scoped operator.
+
+  - code: DEPOSIT_BELOW_MINIMUM
+    detect:
+      condition: text_present
+      value: "Initial deposit must be at least"
+    meaning: >-
+      The application rejected the opening deposit as too small. A business rule
+      speaking, not an automation error; the caller should adjust the amount.

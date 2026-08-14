@@ -1,0 +1,52 @@
+# Safety policy (DESIGN §8). Enforced in the executor before any navigate, click,
+# type or read — in discovery and replay alike. The agent cannot act outside it;
+# a violation ends the run rather than being logged and skipped.
+#
+# This file is configuration, not code, precisely because the boundary of what
+# automation may touch is an operational decision that outlives any one capability.
+
+allowed_origins:
+  - http://127.0.0.1:5000
+  - http://localhost:5000
+
+# Path patterns, anchored, matched against the URL path only — query strings carry
+# no authority here, so a route stays permitted whether or not a chaos flag is
+# appended to it.
+allowed_routes:
+  - ^/$
+  - ^/login$
+  - ^/search$
+  - ^/member/[0-9]{5}$
+  - ^/member/[0-9]{5}/loan-frame$
+  - ^/member/[0-9]{5}/sub-account/new$
+  - ^/member/[0-9]{5}/sub-account/confirm$
+
+# The action space is allowlisted too, not just the surface. Narrowing this is how
+# a deployment says "this tenant may look but not touch" without editing artifacts.
+allowed_actions:
+  - navigate
+  - click
+  - type
+  - read
+
+# Per-step risk (§5, §8). Matched against what the browser actually did — the
+# method of the submitted form and the route it posted to — rather than against
+# the wording of a button, because "Confirm" means nothing on its own.
+#
+# A GET never changes server state and is read_only by construction. An
+# unrecognised POST is treated as `mutating`: over-classifying costs an approval
+# flag, under-classifying costs an unreviewed write to a member's account.
+risk:
+  # POSTs that create or change nothing a caller would care about.
+  read_only_routes:
+    - ^/login$
+    - ^/search$
+
+  # POSTs that change state and need --approve-mutations on replay.
+  mutating_routes:
+    - ^/member/[0-9]{5}/sub-account/new$
+
+  # POSTs that cannot be undone from this terminal. These always pause for a
+  # human, in discovery and replay alike, standing approval or not.
+  irreversible_routes:
+    - ^/member/[0-9]{5}/sub-account/confirm$
