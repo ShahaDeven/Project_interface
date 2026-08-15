@@ -53,6 +53,25 @@ def operator(app):
     return c
 
 
+# Ports Chromium refuses to connect to, no matter what is listening on them: it
+# answers net::ERR_UNSAFE_PORT before a request leaves the browser. Mostly ports
+# with a hijackable protocol of their own (SMTP, NNTP, H.323, IRC...).
+#
+# This matters because `live_server` binds to port 0 and the OS occasionally hands
+# back one of them — 1720 once, which failed every browser test in the suite at
+# once, with a message that looks nothing like "you drew a bad port". Rare enough
+# to look like flakiness and total enough to look like a real regression, which is
+# the worst combination to debug.
+UNSAFE_PORTS = frozenset({
+    1, 7, 9, 11, 13, 15, 17, 19, 20, 21, 22, 23, 25, 37, 42, 43, 53, 69, 77, 79,
+    87, 95, 101, 102, 103, 104, 109, 110, 111, 113, 115, 117, 119, 123, 135, 137,
+    139, 143, 161, 179, 389, 427, 465, 512, 513, 514, 515, 526, 530, 531, 532,
+    540, 548, 554, 556, 563, 587, 601, 636, 989, 990, 993, 995, 1719, 1720, 1723,
+    2049, 3659, 4045, 4190, 5060, 5061, 6000, 6566, 6665, 6666, 6667, 6668, 6669,
+    6679, 6697, 10080,
+})
+
+
 @pytest.fixture(scope="session")
 def live_server(app):
     """The target app on a real socket, for tests that drive a real browser.
@@ -60,13 +79,21 @@ def live_server(app):
     Bound to port 0 so the OS picks a free one — on Windows a stale server can
     keep answering on a port a new one appears to have bound (SO_REUSEADDR permits
     the duplicate bind), and a test suite silently talking to yesterday's build is
-    a bad afternoon.
+    a bad afternoon. The draw is repeated until it lands on a port Chromium is
+    willing to talk to.
     """
     import socket
     import threading
     from werkzeug.serving import make_server
 
-    server = make_server("127.0.0.1", 0, app, threaded=True)
+    for _ in range(20):
+        server = make_server("127.0.0.1", 0, app, threaded=True)
+        if server.socket.getsockname()[1] not in UNSAFE_PORTS:
+            break
+        server.server_close()
+    else:
+        raise RuntimeError("could not bind a port Chromium will connect to")
+
     port = server.socket.getsockname()[1]
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()

@@ -131,8 +131,9 @@
       "description": "A live pause, forward-looking: someone must act now. Carries enough context to act without reading the trace.",
       "properties": {
         "reason": {
-          "enum": ["UNEXPECTED_DIALOG", "SESSION_EXPIRED", "IRREVERSIBLE_STEP", "AGENT_STUCK"],
-          "description": "Why control was handed over. AGENT_STUCK is discovery-only; the rest are replay."
+          "enum": ["UNEXPECTED_DIALOG", "SESSION_EXPIRED", "IRREVERSIBLE_STEP",
+                   "MUTATION_NOT_APPROVED", "AGENT_STUCK"],
+          "description": "Why control was handed over. AGENT_STUCK is discovery-only; the rest are replay. MUTATION_NOT_APPROVED and IRREVERSIBLE_STEP are distinct on purpose — the first is answerable by re-invoking with standing approval, the second never is."
         },
         "detail": { "type": "string", "minLength": 1 },
         "paused_at_step": { "type": "integer", "minimum": 1 },

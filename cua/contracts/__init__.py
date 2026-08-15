@@ -174,6 +174,29 @@ def validate_artifact(artifact):
     return artifact
 
 
+def validate_steps(steps, what="steps"):
+    """Validate a bare list of steps against the artifact schema's step definition.
+
+    Used for recovery routines (`runtime.yaml`), which are not artifacts but are
+    made of the same instruction set. Holding them to the same schema is the point:
+    a re-login routine is executed by the same interpreter, at the moment things
+    are already going wrong, and a second dialect there would be a second, less
+    tested engine running exactly when it can least afford to be.
+    """
+    schema = _load_schema(ARTIFACT_SCHEMA_PATH)
+    validator = Draft202012Validator(
+        {"$defs": schema["$defs"], "$ref": "#/$defs/step"}, format_checker=FORMATS)
+
+    problems = []
+    for position, step in enumerate(steps):
+        for error in sorted(validator.iter_errors(step), key=lambda e: list(e.absolute_path)):
+            location = "/".join(str(part) for part in error.absolute_path) or "(step)"
+            problems.append(f"{what}/{position}: {location}: {error.message}")
+    if problems:
+        raise ContractError(what, problems)
+    return steps
+
+
 def validate_result(result):
     """Raise ContractError if the result envelope is malformed. Returns it otherwise."""
     problems = _schema_problems(result, RESULT_SCHEMA_PATH)

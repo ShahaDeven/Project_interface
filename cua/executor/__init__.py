@@ -7,7 +7,8 @@ the two used different machinery, a capability could pass discovery and fail
 replay for reasons that had nothing to do with the app.
 """
 
-from .browser import BrowserSurface, TargetNotFound
+from .browser import ActionTimeout, BrowserSurface, TargetNotFound
 from .surface import Element, Observation, Surface
 
-__all__ = ["BrowserSurface", "Element", "Observation", "Surface", "TargetNotFound"]
+__all__ = ["ActionTimeout", "BrowserSurface", "Element", "Observation", "Surface",
+           "TargetNotFound"]

@@ -1,8 +1,8 @@
 """`python -m cua` — the CLI surface (DESIGN §12).
 
-Subcommands land as they are built. Ones that are not implemented yet exit 2 with
-a message naming the day they arrive, rather than failing with a traceback or —
-worse — silently doing nothing.
+Every subcommand validates in cost order: parameters, then policy, then a browser,
+then a model. A mistake at the command line should cost milliseconds, not a browser
+launch and a billed call.
 """
 
 import argparse
@@ -15,15 +15,6 @@ from . import __version__
 from .contracts import ContractError, load_artifact, validate_result
 
 ROOT = Path(__file__).resolve().parents[1]
-
-NOT_YET = 2
-
-
-def _not_implemented(what, when):
-    print(f"'{what}' is not implemented yet ({when}).", file=sys.stderr)
-    print("Built so far: `target_app serve`, `validate`.", file=sys.stderr)
-    return NOT_YET
-
 
 def cmd_target_app(args):
     if args.action == "serve":
@@ -153,8 +144,91 @@ def _distil(args, evidence, result):
     return 0
 
 
-def cmd_replay(_args):
-    return _not_implemented("replay", "Day 3")
+def cmd_replay(args):
+    """Execute a saved capability with new inputs. No model in the loop."""
+    from playwright.sync_api import sync_playwright
+
+    from .evidence import RunEvidence
+    from .executor import BrowserSurface
+    from .policy import Allowlist, PolicyViolation
+    from .replay import InputError, ReplayEngine, RuntimeConfig, bind_inputs, parse_params
+
+    path = ROOT / "capabilities" / f"{args.capability}.json"
+    if not path.exists():
+        print(f"No capability named '{args.capability}' in capabilities/", file=sys.stderr)
+        return 1
+
+    try:
+        artifact = load_artifact(path)
+    except ContractError as error:
+        print(f"{path} is not a valid capability:\n{error}", file=sys.stderr)
+        return 1
+
+    # Cost order again: parameters, then policy, then a browser.
+    try:
+        params = parse_params(args.param)
+        inputs = bind_inputs(artifact, params)
+        Allowlist.from_file().check_origin(args.target)
+    except (InputError, PolicyViolation) as error:
+        print(f"Refusing to start: {error}", file=sys.stderr)
+        return 1
+
+    app = artifact["capability"]["recorded_against"]["app"]
+    runtime = RuntimeConfig.load(app)
+    if not runtime.profiled:
+        print(f"warning: no runtime profile for '{app}'; error pages and session "
+              f"expiry cannot be recognised", file=sys.stderr)
+
+    evidence = RunEvidence()
+    print(f"Replay {args.capability} v{artifact['capability']['version']}  "
+          f"run {evidence.run_id}")
+    print(f"Inputs: {inputs}")
+
+    with sync_playwright() as playwright:
+        surface = BrowserSurface(playwright, headless=args.headless)
+        try:
+            engine = ReplayEngine(surface, artifact, evidence=evidence, runtime=runtime,
+                                  approve_mutations=args.approve_mutations,
+                                  screenshots=args.screenshots, chaos=args.chaos)
+            result = engine.run(params, args.target)
+        finally:
+            surface.close()
+
+    envelope = result.envelope
+    print(f"\nStatus: {result.status}  "
+          f"({envelope['steps_completed']}/{envelope['steps_total']} steps, "
+          f"llm_call_count={envelope['llm_call_count']})")
+    if envelope.get("drift_warning"):
+        print(f"Drift: {envelope['drift_warning']}")
+    for recovery in result.recoveries:
+        # Surfaced but not promoted: the run recovered, so this is information for
+        # whoever is watching, not a status the caller has to branch on.
+        print(f"Recovered: {recovery['condition']} at step {recovery['step']} "
+              f"({', '.join(f'{k}={v}' for k, v in recovery.items() if k not in ('condition', 'step'))})")
+    if result.outputs:
+        print("Outputs:")
+        for name, value in result.outputs.items():
+            print(f"  {name} = {value!r}  ({type(value).__name__})")
+
+    payload = envelope.get("payload", {})
+    if result.status == "BUSINESS_OUTCOME":
+        # Printed to stdout, not stderr, and exits 0: this is an answer, not an
+        # error. A caller scripting around this system should be able to branch on
+        # the outcome code without treating the run as broken.
+        print(f"\nOutcome: {payload['outcome_code']}  "
+              f"(detected at step {payload['detected_at_step']})")
+        print(f"  {payload['detail']}")
+    elif result.status == "HARD_FAILURE":
+        print(f"\nFailed at step {payload['failed_at_step']} ({payload['action_attempted']})",
+              file=sys.stderr)
+        print(f"  expected: {payload['expected']}", file=sys.stderr)
+        print(f"  observed: {payload['observed']}", file=sys.stderr)
+    elif result.status == "NEEDS_INTERVENTION":
+        print(f"\n{payload['reason']}: {payload['detail']}", file=sys.stderr)
+        print(f"  requested: {payload['requested_action']}", file=sys.stderr)
+
+    print(f"Evidence: {result.evidence_path}")
+    return 0 if result.status in ("SUCCESS", "BUSINESS_OUTCOME") else 1
 
 
 def build_parser():
@@ -185,10 +259,19 @@ def build_parser():
                                "since the handoff seam needs a window a human can take over)")
     discover.set_defaults(func=cmd_discover)
 
-    replay = subcommands.add_parser("replay", help="execute a saved artifact (Day 3)")
+    replay = subcommands.add_parser("replay", help="execute a saved artifact, no LLM")
     replay.add_argument("capability")
     replay.add_argument("--param", action="append", default=[], metavar="NAME=VALUE")
-    replay.add_argument("--approve-mutations", action="store_true")
+    replay.add_argument("--target", default="http://127.0.0.1:5000",
+                        help="base URL the artifact's {base_url} resolves to")
+    replay.add_argument("--approve-mutations", action="store_true",
+                        help="standing approval for `mutating` steps; never covers "
+                             "`irreversible` ones")
+    replay.add_argument("--headless", action="store_true")
+    replay.add_argument("--screenshots", choices=["failure", "all"], default="failure")
+    replay.add_argument("--chaos", choices=["slow", "session", "dialog", "error"],
+                        help="demo scaffolding: arm a runtime condition in the target "
+                             "app from this run's own browser session, mid-flow")
     replay.set_defaults(func=cmd_replay)
 
     return parser

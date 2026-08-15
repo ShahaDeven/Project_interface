@@ -1,0 +1,124 @@
+# Global runtime conditions (DESIGN §6) — the replay engine's recognisers.
+#
+# Three config files, three kinds of knowledge, and they are separate because they
+# change for different reasons and are reviewed by different people:
+#
+#   policy.yaml    what automation is PERMITTED to do        (permission)
+#   outcomes.yaml  what a business result MEANS              (semantics)
+#   runtime.yaml   how to RECOGNISE a runtime condition      (this file)
+#
+# The distinction that matters most is between this file and outcomes.yaml. A
+# business outcome is capability-specific, declared in the artifact, and terminal —
+# "no such member" is an answer. A runtime condition is app-wide, lives here, and is
+# mostly *recoverable* — a slow page is not an answer, it is weather. Conflating
+# them is how "the page was slow" ends up reported to a caller as a business result.
+#
+# `defaults` is engine-wide behaviour and always applies. Everything under an app
+# key is how that particular surface expresses these conditions.
+
+defaults:
+  # Bounded per ATTEMPT, not per step — the retry policy below supplies the overall
+  # tolerance (5s + 1s + 5s + 2s + 5s ≈ 18s here). Splitting it that way is
+  # deliberate: one long wait can only ever tell you it eventually finished, while
+  # short waits with retries tell you it was late and by how much, which is the
+  # difference between a run that silently takes twelve seconds and one that
+  # reports a recovered SLOW_LOAD.
+  #
+  # A timed-out action is never re-sent, only re-checked: a submitted form may be
+  # processing while the browser gives up waiting, and re-sending is how automation
+  # double-posts.
+  step_timeout_ms: 5000
+  settle_timeout_ms: 5000
+
+  # SLOW_LOAD. Recoverable: retried, logged in the trace as a recovery, and never
+  # a terminal status — until the attempts run out, at which point it is a
+  # HARD_FAILURE like any other.
+  slow_load:
+    max_attempts: 3
+    backoff_seconds: [1, 2, 4]
+
+
+legacy-cu-portal:
+
+  # APP_ERROR -> HARD_FAILURE. No retry: a 500 is the app telling us it is broken,
+  # and asking again is not a plan.
+  app_error:
+    - condition: text_present
+      value: "HTTP 500 — Internal Server Error"
+
+  session_expired:
+    # Consulted ONLY after a step's checkpoint has already failed. The login page
+    # is a legitimate destination at the start of every capability, so its presence
+    # on its own is evidence of nothing — it is arriving there *unexpectedly* that
+    # means the session died.
+    detect:
+      - condition: url_matches
+        value: /login
+
+    # SESSION_EXPIRED is recoverable only because this routine exists (§6). Absent
+    # it, the engine escalates instead of guessing at credentials.
+    #
+    # These are ordinary steps in the artifact instruction set, validated against
+    # the same schema, and executed by the same interpreter. A recovery routine
+    # that needed its own execution machinery would be a second, less-tested engine
+    # running at exactly the moment things are already going wrong.
+    relogin:
+      - id: 1
+        action: type
+        risk: read_only
+        reason: "Re-enter the operator ID after a session timeout."
+        target:
+          strategies:
+            - kind: label
+              value: "Operator ID"
+              role: textbox
+        value: "{secrets.operator_id}"
+      - id: 2
+        action: type
+        risk: read_only
+        reason: "Re-enter the operator password."
+        target:
+          strategies:
+            - kind: label
+              value: "Password"
+              role: password
+        value: "{secrets.operator_password}"
+      - id: 3
+        action: click
+        risk: read_only
+        reason: "Sign back on and return to the flow."
+        target:
+          strategies:
+            - kind: label
+              value: "Sign On"
+              role: button
+        checkpoint:
+          condition: text_present
+          value: "Member Lookup"
+
+  dialogs:
+    # There is no portable way to ask a page "is a modal covering you?" — no
+    # accessibility tree here, no convention to rely on. So how *this* app renders
+    # a modal is declared, and the engine's rule is structural rather than
+    # semantic: anything matching this selector that is not named below is an
+    # UNKNOWN_DIALOG.
+    detect_selector: 'div[style*="position:fixed"]'
+
+    # KNOWN_INTERSTITIAL -> recoverable: dismissed, logged, execution continues.
+    #
+    # Deliberately empty. The only modal this app can raise is the maintenance
+    # notice from `?chaos=dialog`, and that one must stay unknown — it is the
+    # trigger for the human-handoff demo in §10. Listing it here would make the
+    # escalation path undemonstrable, which is worse than leaving this list empty.
+    # The shape below is what an entry looks like when there is one to declare.
+    #
+    # Empty here, but not untested: a test declares that same modal known and
+    # watches the run dismiss it and carry on, which is the point worth proving —
+    # the same page turns from a stop into a recovery by editing this list, with
+    # no engine change.
+    known: []
+    # - name: SESSION_WARNING
+    #   detect: { condition: text_present, value: "Your session will expire" }
+    #   dismiss:
+    #     strategies:
+    #       - { kind: label, value: "Continue working", role: button }

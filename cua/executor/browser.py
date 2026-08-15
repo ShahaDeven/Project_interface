@@ -16,6 +16,8 @@ after. A rejected action never happens.
 
 import time
 
+from playwright.sync_api import TimeoutError as PlaywrightTimeout
+
 from ..policy import Allowlist, PolicyViolation
 from .elements import distill
 from .surface import Element, Observation
@@ -28,6 +30,16 @@ class TargetNotFound(Exception):
     """A recorded target could not be resolved on the live page by any strategy."""
 
 
+class ActionTimeout(Exception):
+    """An action did not complete within the per-attempt bound.
+
+    Deliberately distinct from a failure. The action may well have gone through —
+    a submitted form can be processing while the browser gives up waiting — so the
+    caller's job is to wait and re-check, never to re-send. Retrying the action
+    itself is how automation double-posts.
+    """
+
+
 class BrowserSurface:
     """A live Chromium page, presented as a Surface.
 
@@ -36,9 +48,11 @@ class BrowserSurface:
     """
 
     def __init__(self, playwright, allowlist=None, headless=False,
-                 viewport=(1280, 900), timeout_ms=DEFAULT_TIMEOUT_MS):
+                 viewport=(1280, 900), timeout_ms=DEFAULT_TIMEOUT_MS,
+                 settle_timeout_ms=SETTLE_TIMEOUT_MS):
         self.allowlist = allowlist or Allowlist.from_file()
         self.timeout_ms = timeout_ms
+        self.settle_timeout_ms = settle_timeout_ms
         self._browser = playwright.chromium.launch(headless=headless)
         self._context = self._browser.new_context(
             viewport={"width": viewport[0], "height": viewport[1]})
@@ -68,10 +82,16 @@ class BrowserSurface:
     # ---------------------------------------------------------- perception --
 
     def settle(self):
-        """Bounded wait for the page to stop moving. Never unbounded, never model-decided."""
+        """Bounded wait for the page to stop moving. Never unbounded, never model-decided.
+
+        Bounded separately from the action timeout because they answer different
+        questions: `timeout_ms` is how long one action may take to land, this is
+        how long the page may take to stop moving afterwards. A surface with slow
+        polling widgets wants the second raised without loosening the first.
+        """
         try:
-            self.page.wait_for_load_state("domcontentloaded", timeout=SETTLE_TIMEOUT_MS)
-            self.page.wait_for_load_state("networkidle", timeout=SETTLE_TIMEOUT_MS)
+            self.page.wait_for_load_state("domcontentloaded", timeout=self.settle_timeout_ms)
+            self.page.wait_for_load_state("networkidle", timeout=self.settle_timeout_ms)
         except Exception:
             # A page that never goes idle is a condition to observe and report,
             # not a reason to hang. The outcome scanner deals with what it finds.
@@ -99,6 +119,52 @@ class BrowserSurface:
 
     def current_url(self):
         return self.page.url
+
+    def background_request(self, url):
+        """Issue a same-session request without navigating away from the page.
+
+        Used only to arm the target app's chaos flags, which are session-scoped:
+        the browser that will experience the condition has to be the one that arms
+        it, and a navigation would destroy the page state the flow has built up.
+        Still allowlisted — a background request is an action like any other.
+        """
+        self.allowlist.check_navigate(url)
+        return self.page.evaluate(
+            # Redirects are NOT followed. A followed redirect is a second request,
+            # and a second request is another page load — which, when this is used
+            # to arm a one-shot condition, means the arming call consumes the very
+            # thing it just armed.
+            "async (target) => (await fetch(target, "
+            "{credentials: 'same-origin', redirect: 'manual'})).status",
+            url)
+
+    def dialog_present(self, selector):
+        """Text of any visible modal, or None when there is none.
+
+        Takes a selector because there is no portable way to ask a page whether
+        something is covering it — no accessibility tree here, no convention. How
+        this app renders a modal is declared in runtime.yaml; the engine's rule on
+        top of it is structural: anything matching that is not declared is unknown,
+        and unknown means stop.
+
+        The combined text of every match is returned, because a modal is usually
+        two elements — a dimming overlay carrying no text and the box carrying all
+        of it — and either alone is a misleading answer.
+        """
+        if not selector:
+            return None
+        try:
+            found = self.page.locator(selector)
+            texts = []
+            for index in range(found.count()):
+                item = found.nth(index)
+                if item.is_visible():
+                    texts.append((item.inner_text() or "").strip())
+            if not texts:
+                return None
+            return " ".join(" ".join(texts).split())
+        except Exception:
+            return None
 
     def page_marker(self):
         """The shortest distinctive text that names the page we are now on.
@@ -128,42 +194,80 @@ class BrowserSurface:
         self.page.screenshot(path=str(path))
         return str(path)
 
-    def text_present(self, needle):
-        """Whole-document text search, frames included — a maintenance modal or a
-        denial banner is just as real inside a frame as outside one.
+    def dom_snapshot(self, path):
+        """Serialised DOM at a moment of failure (§7, §10).
 
-        Whitespace-insensitive on both sides. The element list the agent reads from
-        is already whitespace-normalised, while `inner_text` puts newlines between
-        table cells, so a phrase copied faithfully out of the observation would
-        otherwise fail to match the page it was copied from. Still a literal
-        substring test: case and wording must be exact.
+        A screenshot shows what it looked like; this shows what it *was*. When a
+        recorded locator stops resolving, the difference between "the element
+        moved" and "the page was never rendered" is only visible here.
+        """
+        from pathlib import Path
+        Path(path).parent.mkdir(parents=True, exist_ok=True)
+        Path(path).write_text(self.page.content(), encoding="utf-8")
+        return str(path)
+
+    def page_text(self):
+        """All visible text, frames included, whitespace-normalised.
+
+        Returned in one call so a caller checking many needles — the outcome
+        scanner checks every declared outcome after every step — pays for one DOM
+        read rather than one per needle. A denial banner or a maintenance modal is
+        just as real inside a frame as outside one.
+        """
+        chunks = []
+        for frame in self.page.frames:
+            try:
+                chunks.append(frame.locator("body").inner_text(timeout=1000) or "")
+            except Exception:
+                continue
+        return " ".join(" ".join(chunks).split())
+
+    def text_present(self, needle, haystack=None):
+        """Literal substring test, whitespace-insensitive on both sides.
+
+        The element list the agent reads from is already whitespace-normalised,
+        while `inner_text` puts newlines between table cells, so a phrase copied
+        faithfully out of an observation would otherwise fail to match the page it
+        came from. Case and wording still have to be exact.
         """
         wanted = " ".join((needle or "").split())
         if not wanted:
             return False
-        for frame in self.page.frames:
-            try:
-                body = frame.locator("body").inner_text(timeout=1000) or ""
-            except Exception:
-                continue
-            if wanted in " ".join(body.split()):
-                return True
-        return False
+        return wanted in (self.page_text() if haystack is None else haystack)
 
     # -------------------------------------------------------------- actions --
+
+    def set_timeout(self, milliseconds, settle_ms=None):
+        """Per-attempt bound, supplied by the replay engine's runtime config.
+
+        `settle_ms` is optional so discovery, which has no runtime profile to read
+        one from, keeps the built-in default.
+        """
+        self.timeout_ms = milliseconds
+        self.page.set_default_timeout(milliseconds)
+        if settle_ms is not None:
+            self.settle_timeout_ms = settle_ms
 
     def navigate(self, url):
         self.allowlist.check_action("navigate")
         self.allowlist.check_navigate(url)
-        self.page.goto(url, wait_until="domcontentloaded")
+        try:
+            self.page.goto(url, wait_until="domcontentloaded")
+        except PlaywrightTimeout:
+            raise ActionTimeout(f"navigation to {url} exceeded {self.timeout_ms}ms") from None
         self.settle()
 
-    def click(self, element):
+    def click(self, element, strategies=None):
         self.allowlist.check_action("click")
-        self._resolve(element).click()
+        locator = self._resolve(element, strategies)
+        try:
+            locator.click()
+        except PlaywrightTimeout:
+            raise ActionTimeout(
+                f"click on {element.label!r} exceeded {self.timeout_ms}ms") from None
         self.settle()
 
-    def type(self, element, text):
+    def type(self, element, text, strategies=None):
         """Set a control's value.
 
         "Type" is the agent's only value-setting verb, so it has to mean the right
@@ -174,7 +278,7 @@ class BrowserSurface:
         interpreter, to express something the surface already makes unambiguous.
         """
         self.allowlist.check_action("type")
-        locator = self._resolve(element)
+        locator = self._resolve(element, strategies)
 
         if element.role == "select":
             try:
@@ -195,9 +299,9 @@ class BrowserSurface:
         locator.fill("")
         locator.fill(text)
 
-    def read(self, element):
+    def read(self, element, strategies=None):
         self.allowlist.check_action("read")
-        locator = self._resolve(element)
+        locator = self._resolve(element, strategies)
         if element.kind == "interactive" and element.role != "password":
             value = locator.input_value() if element.role in ("textbox", "select") else None
             if value:

@@ -59,6 +59,7 @@ and its schema is the instruction set.
   evidence.py         per-run directory, trace/transcript writers
 /policy.yaml          allowlist + per-step risk routes (§8)
 /outcomes.yaml        business outcomes declared per app (§5, §6)
+/runtime.yaml         runtime-condition recognisers + recovery routines (§6)
 /capabilities/        saved artifacts (one JSON per capability)
 /evidence/            per-run directories (see §10)
 ```
@@ -266,7 +267,15 @@ After **every** step, the replay engine scans two lists:
    return `BUSINESS_OUTCOME`. (Checked every step because runtime surprises don't respect
    the step where you expect them; detection markers are specific text, so false-positive
    risk is low. Cost: milliseconds.)
-2. **Global runtime conditions** — engine config, shared across all capabilities:
+2. **Global runtime conditions** — engine config in `runtime.yaml`, shared across
+   all capabilities. Three config files because there are three kinds of knowledge,
+   changed for different reasons and reviewed by different people: `policy.yaml` is
+   what automation is *permitted* to do, `outcomes.yaml` is what a business result
+   *means*, `runtime.yaml` is how to *recognise* a condition on this surface. The
+   sharpest line is between the last two — a business outcome is capability-specific,
+   declared in the artifact, and terminal; a runtime condition is app-wide and mostly
+   recoverable. Conflating them is how "the page was slow" reaches a caller dressed
+   as a business result.
    - `SLOW_LOAD` → recoverable: retry with backoff, max 3 attempts, then HARD_FAILURE
    - `SESSION_EXPIRED` → recoverable **only** if a `relogin` recovery routine is defined
      for the app; else NEEDS_INTERVENTION
@@ -469,7 +478,16 @@ distiller slugifies whatever text names the control (`Member number` →
 `member_number`). A hand-picked mapping would read better and would be one more
 thing to keep in step with a UI nobody controls.
 
-Built so far: `target_app serve`, `validate`, `discover`. `replay` is Day 3.
+`replay` also takes `--target`, `--headless`, `--screenshots {failure,all}`, and
+`--chaos {slow,session,dialog,error}`. The chaos flag belongs on the invocation
+rather than being armed out of band because the target app's flags are
+session-scoped: the browser that will experience the condition has to be the one
+that arms it, and it arms it mid-flow — armed on the opening navigation, every
+condition lands on the login page and proves nothing.
+
+Built so far: `target_app serve`, `validate`, `discover`, `replay`. Day 4 (HITL)
+adds no new subcommand: an intervention is a state a run enters, not a command
+someone invokes, so it surfaces on `replay`.
 
 ---
 

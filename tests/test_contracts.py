@@ -368,14 +368,18 @@ class TestValidateCommand:
         assert main(["validate", str(path)]) == 1
         assert "FAIL" in capsys.readouterr().err
 
-    def test_unbuilt_commands_exit_two_rather_than_crashing(self, capsys):
-        """`replay` is the remaining stub. Deliberately NOT `discover`: that one is
-        built now, and invoking it from a test would launch a browser and bill a
-        model call. A test suite must not be able to spend money."""
+    def test_replay_refuses_bad_parameters_without_launching_anything(self, capsys):
+        """Every subcommand is built now, so this no longer guards a stub — it
+        guards the property that made the stub check worth having: a CLI mistake
+        must cost nothing. Parameters are validated against the capability's
+        contract before a browser opens, and this test would hang or spend money
+        if that order ever inverted."""
         from cua.__main__ import main
         code = main(["replay", "lookup_member_balance", "--param", "member_id=23456"])
-        assert code == 2
-        assert "not implemented yet" in capsys.readouterr().err
+        assert code == 1
+        error = capsys.readouterr().err
+        assert "unknown parameter(s) ['member_id']" in error
+        assert "member_number" in error, "should name what the capability does declare"
 
     def test_discover_refuses_an_off_allowlist_target_without_spending_anything(self, capsys):
         """Fail in cost order: no browser, no client, no tokens."""

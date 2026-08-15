@@ -21,12 +21,19 @@ README only tells you how to run things.
 | `cua/agent/` — discovery loop, six tools (§4) | **done** |
 | `cua/distill/` — trace → artifact | **done** |
 | `cua/policy/` — allowlist, risk classification, redaction (§8) | **done** |
-| `cua/replay/` — the interpreter (§6) | not started |
+| `cua/replay/` — the interpreter (§6) | **done** |
 | `cua/hitl/` — escalation and handoff (§9) | not started |
 
-225 tests cover what is done, and two capabilities have been recorded from real
-LLM-driven runs. `replay` is the remaining core piece; it exits 2 with a message
-rather than failing obscurely.
+286 tests cover what is done, and two capabilities have been recorded from real
+LLM-driven runs.
+
+Replay is complete: input binding, the strategy fallback chain, per-step
+checkpoints, the outcome scanner, runtime-condition recovery and the risk gates.
+What remains is the far side of an escalation. Today a run that needs a human
+stops and hands back a `NEEDS_INTERVENTION` envelope naming the live browser
+session; it cannot yet pause, wait for that person, capture what they did, and
+resume. The trigger is real and the payload is real — the seam in §9 is what is
+missing.
 
 ---
 
@@ -98,6 +105,99 @@ Two capabilities are committed, both recorded this way:
 Nothing about them is hand-authored. Input names come from the on-screen labels,
 per-step risk from `policy.yaml`, and business outcomes from `outcomes.yaml` scoped
 to the routes each flow visits.
+
+---
+
+## Replay a capability
+
+The production path. Same artifact, new inputs, **zero model calls** — no API key
+is involved, and `llm_call_count` is counted rather than declared.
+
+```bash
+python -m cua replay lookup_member_balance --param member_number=23456
+```
+
+Recorded against member `12345`, run against `23456`, and it ends with a typed
+number rather than a sentence about one:
+
+```
+Status: SUCCESS  (7/7 steps, llm_call_count=0)
+Outputs:
+  savings_balance = 18240.55  (float)
+Evidence: evidence/run_20260814_183900/
+```
+
+The same artifact is meant to produce a different ending per input, and the
+ending is the point:
+
+| Command | Ends with | Exit |
+|---|---|---|
+| `--param member_number=23456` | `SUCCESS`, `savings_balance = 18240.55` | 0 |
+| `--param member_number=99999` | `BUSINESS_OUTCOME` `MEMBER_NOT_FOUND` | 0 |
+| `--param member_number=67890` | `BUSINESS_OUTCOME` `PERMISSION_DENIED` | 0 |
+
+Both outcomes exit **0**. They are answers a caller branches on, not failures —
+member `99999`'s run detects the outcome at step 6, the very step whose
+checkpoint fails, and reports the answer instead of the crash. Only
+`HARD_FAILURE` and `NEEDS_INTERVENTION` exit 1.
+
+Everything that can fail cheaply fails before the browser opens. A bad member
+number costs milliseconds:
+
+```bash
+python -m cua replay lookup_member_balance --param member_number=abc
+# Refusing to start: invalid parameters (1):
+#   - member_number: 'abc' does not match ^[0-9]{5}$
+```
+
+### Mutations and the risk gate
+
+```bash
+python -m cua replay open_sub_account --param member_number=23456 \
+  --param account_type="Holiday Club" --param account_nickname="Vacation fund" \
+  --param initial_deposit=150.00 --approve-mutations
+```
+
+Thirteen steps, of which exactly one is `mutating` (step 11, "Proceed to review")
+and one `irreversible` (step 12, "Confirm and finalize"). Without
+`--approve-mutations` the run stops at step 11 with `MUTATION_NOT_APPROVED`. With
+it, eleven steps complete and it stops at step 12 anyway, with
+`IRREVERSIBLE_STEP`: standing approval is a statement about a *class* of actions,
+never consent to one particular unrepeatable one. In both cases the sub-account
+is genuinely not created — the gate stops the step, it does not report on one
+that already ran, which the tests assert against the app's own state rather than
+against the envelope.
+
+### Injecting a runtime condition
+
+`--chaos` arms one of the target app's flags from inside the run's own browser
+session, mid-flow, just before the first click. It has to be the replay browser
+that arms it, because the flags are session-scoped — a side-channel request would
+arm a session nobody is driving. And it has to be mid-flow: armed on the opening
+navigation every condition lands on the login page, where an 8s stall is absorbed
+by the navigation timeout and a cleared session changes nothing, so the run goes
+green and proves the opposite of what it claims.
+
+```bash
+python -m cua replay lookup_member_balance --param member_number=23456 --chaos slow
+```
+
+| Flag | What the engine does | Status |
+|---|---|---|
+| `--chaos slow` | per-attempt bound expires, re-checks (never re-sends), recovers | `SUCCESS` + `Recovered: SLOW_LOAD` |
+| `--chaos session` | runs the declared re-login routine, re-verifies, continues | `SUCCESS` + `Recovered: SESSION_EXPIRED` |
+| `--chaos dialog` | refuses to guess at an unrecognised modal | `NEEDS_INTERVENTION` |
+| `--chaos dialog`, modal declared in `runtime.yaml` | dismisses it, logs it, steps past | `SUCCESS` + `Recovered: KNOWN_INTERSTITIAL` |
+| `--chaos error` | no retry — a 500 is the app saying it is broken | `HARD_FAILURE` |
+
+A recovered condition is printed and logged in the trace but never becomes the
+status: the caller asked whether the capability succeeded, not whether the
+network had a bad afternoon. That is the three-class rule in DESIGN §6, and the
+`slow` run is where you can watch it — `action_timeout`, then `recovered` with
+`attempts: 2`, then `SUCCESS`.
+
+Other flags: `--target` (default `http://127.0.0.1:5000`), `--headless`, and
+`--screenshots all` for a capture per step rather than only on failure.
 
 ---
 
@@ -189,7 +289,7 @@ TARGET_APP_BUILD=4.4.0 python -m target_app
 ## Tests
 
 ```bash
-pytest                       # 225 tests, ~1 min
+pytest                       # 286 tests, ~3 min
 pytest -m "not browser"      # skips the ones driving real Chromium
 pytest -m "not slow"         # skips the one that waits out the real 8s delay
 ```
@@ -199,6 +299,13 @@ two contracts and their referential integrity, element distillation and the stra
 fallback chain against a real browser, the allowlist, risk classification,
 redaction, and the discovery loop — the last with a faked surface and model, so a
 test suite can never launch a browser or spend money on the API.
+
+Replay is tested end to end against the live app in a real browser, which is
+affordable precisely because there is no model in that path: every demo below is
+a test, including the recovered slow load, the re-login, the unknown dialog, the
+two business outcomes and both risk gates. `llm_call_count: 0` is asserted as a
+measured property of a run, and the result schema refuses any other value when
+`mode` is `replay`.
 
 ---
 
@@ -213,12 +320,13 @@ cua/                  the system under evaluation
   agent/              discovery loop, the six tools, prompts
   distill/            trace → artifact
   policy/             allowlist, risk classification, redaction
-  replay/             the interpreter (Day 3)
+  replay/             the interpreter: binding, checkpoints, outcomes, recovery
   hitl/               pause / cede control / resume (Day 4)
   config.py           model, stopping conditions, {secrets.*} resolution
   evidence.py         per-run directory, trace and transcript writers
 policy.yaml           permitted origins and routes; per-step risk routes
 outcomes.yaml         business outcomes declared per application
+runtime.yaml          how to recognise a runtime condition on this surface
 capabilities/         saved artifacts, one JSON per capability
 evidence/             per-run traces, screenshots, transcripts
 tests/
@@ -230,19 +338,17 @@ REPORT.md             the design write-up
 
 ## Coming next
 
-Replay is the production path: the same artifact, new inputs, **zero model calls**.
-Not yet implemented — listed so the intended shape is visible (DESIGN §12):
+The human-handoff seam (DESIGN §9). Every trigger into it already works —
+`--chaos dialog` produces a live `NEEDS_INTERVENTION` naming the browser session,
+and both risk gates produce one on demand — but the run currently ends there
+instead of pausing.
 
-```bash
-python -m cua replay lookup_member_balance --param member_number=23456
-python -m cua replay lookup_member_balance --param member_number=99999
-python -m cua replay open_sub_account --param member_number=23456 \
-       --param account_type="Holiday Club" --param account_nickname="Vacation fund" \
-       --param initial_deposit=150.00 --approve-mutations
-```
+What is missing is the far side: the `RUNNING → PAUSED_FOR_HUMAN → RESUMING`
+state machine, the terminal operator prompt, capture of what the person did while
+control was theirs, re-verification of the checkpoint before control returns
+(never a blind resume), and the `intervention_record` on the final result. The
+console is deliberately mocked; the mechanism is not — the human takes over the
+same live Playwright session, which is why the session id is in the envelope
+today rather than a placeholder for one.
 
-Input names are derived from the field's on-screen label rather than authored, so
-`Member number` becomes `member_number`. The same artifact is meant to produce a
-different ending per input: `23456` succeeds with typed outputs, `99999` returns
-`MEMBER_NOT_FOUND` and `67890` returns `PERMISSION_DENIED` — both business outcomes
-a caller branches on, not failures.
+Then the committed evidence set (DESIGN §10) and REPORT.md.

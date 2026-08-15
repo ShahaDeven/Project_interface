@@ -226,6 +226,19 @@ class TestActions:
         surface.observe(screenshot_path=path)
         assert path.exists() and path.stat().st_size > 0
 
+    def test_both_waiting_bounds_are_settable(self, surface):
+        """Two bounds, two questions: how long one action may take to land, and
+        how long the page may take to stop moving afterwards. A surface with slow
+        polling widgets wants the second raised without loosening the first."""
+        surface.set_timeout(4_000, 2_500)
+        assert (surface.timeout_ms, surface.settle_timeout_ms) == (4_000, 2_500)
+
+    def test_the_settle_bound_is_optional_and_keeps_its_default(self, surface):
+        """Discovery has no runtime profile to read one from."""
+        before = surface.settle_timeout_ms
+        surface.set_timeout(4_000)
+        assert surface.settle_timeout_ms == before
+
 
 # =============================================================================
 # Allowlist — checked on the way in, never audited on the way out

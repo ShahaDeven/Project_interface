@@ -50,6 +50,13 @@ def create_app():
             session[chaos_mod.SESSION_KEY] = incoming
             return None
 
+        # Only a GET fires it. A POST here answers with a redirect, and a redirect
+        # is not a page load — the page load is the GET that follows it. Firing on
+        # the POST spends the flag on a response with no body, which loses an
+        # injected dialog entirely and delays a redirect nobody is looking at.
+        if request.method != "GET":
+            return None
+
         armed = session.pop(chaos_mod.SESSION_KEY, None)
         if armed == "slow":
             time.sleep(chaos_mod.SLOW_SECONDS)

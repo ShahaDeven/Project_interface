@@ -5,7 +5,8 @@ what read_only, mutating and irreversible steps are allowed to do; and the
 redaction layer that sits between raw observation and anything persisted, so
 credentials and session tokens never reach a trace, artifact or log.
 
-Risk gates and redaction arrive on Day 3.
+The classification lives here; the gate that acts on it is in the replay engine,
+which is the only place that knows what approvals an invocation carries.
 """
 
 from .allowlist import Allowlist, PolicyViolation
