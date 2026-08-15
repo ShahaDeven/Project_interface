@@ -25,6 +25,82 @@ from .surface import Element, Observation
 DEFAULT_TIMEOUT_MS = 10_000
 SETTLE_TIMEOUT_MS = 5_000
 
+# Marks anything this system paints onto the page, so the system can tell its own
+# furniture from the application's. Exactly one thing is painted — the handoff
+# banner — and it must be excluded from dialog detection, because it is a
+# fixed-position element and that is precisely how runtime.yaml recognises a modal.
+BANNER_MARKER = "data-cua-handoff"
+
+_SHOW_BANNER = """
+(banner) => {
+  document.querySelectorAll('[data-cua-handoff]').forEach(n => n.remove());
+  if (!document.body) return;
+  const box = document.createElement('div');
+  box.setAttribute('data-cua-handoff', 'banner');
+  box.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:2147483647;'
+    + 'background:#7a0000;color:#ffffff;padding:10px 14px;'
+    + 'border-bottom:4px solid #ffcc00;text-align:left;'
+    + 'font:bold 13px Verdana,Arial,sans-serif;';
+  const head = document.createElement('div');
+  head.style.cssText = 'font-size:16px;letter-spacing:0.5px;';
+  head.textContent = banner.headline;
+  box.appendChild(head);
+  for (const line of banner.lines) {
+    const row = document.createElement('div');
+    row.style.cssText = 'font-weight:normal;font-size:12px;padding-top:3px;';
+    row.textContent = line;
+    box.appendChild(row);
+  }
+  if (banner.choices && banner.choices.length) {
+    const bar = document.createElement('div');
+    bar.style.cssText = 'padding-top:8px;';
+    for (const choice of banner.choices) {
+      const button = document.createElement('button');
+      button.setAttribute('data-cua-handoff', 'choice');
+      button.textContent = choice.label;
+      button.style.cssText = 'margin-right:8px;padding:6px 14px;cursor:pointer;'
+        + 'font:bold 13px Verdana,Arial,sans-serif;border:2px solid #ffffff;'
+        + 'background:' + (choice.value === 'resume' ? '#0b6b2f' : '#333333')
+        + ';color:#ffffff;';
+      button.onclick = () => {
+        document.documentElement.setAttribute('data-cua-decision', choice.value);
+        bar.textContent = 'Sent: ' + choice.label + '. Returning control...';
+        bar.style.cssText = 'padding-top:8px;font-weight:normal;font-size:12px;';
+      };
+      bar.appendChild(button);
+    }
+    box.appendChild(bar);
+  }
+  document.body.appendChild(box);
+  if (banner.title) {
+    const root = document.documentElement;
+    if (!root.hasAttribute('data-cua-title')) {
+      root.setAttribute('data-cua-title', document.title);
+    }
+    document.title = banner.title;
+  }
+}
+"""
+
+_CLEAR_BANNER = """
+() => {
+  document.querySelectorAll('[data-cua-handoff]').forEach(n => n.remove());
+  const root = document.documentElement;
+  root.removeAttribute('data-cua-decision');
+  const prior = root.getAttribute('data-cua-title');
+  if (prior !== null) {
+    document.title = prior;
+    root.removeAttribute('data-cua-title');
+  }
+}
+"""
+
+# Read on a poll while the operator holds control. An attribute on <html> rather
+# than a JS variable because the banner is repainted after navigation, and a
+# variable would not survive the very page change an operator is most likely to
+# cause.
+_READ_DECISION = "() => document.documentElement.getAttribute('data-cua-decision')"
+
 
 class TargetNotFound(Exception):
     """A recorded target could not be resolved on the live page by any strategy."""
@@ -58,6 +134,11 @@ class BrowserSurface:
             viewport={"width": viewport[0], "height": viewport[1]})
         self.page = self._context.new_page()
         self.page.set_default_timeout(timeout_ms)
+        self._banner = None
+        # A navigation wipes the banner, and a paused run is exactly when the human
+        # is navigating. Repainting on load keeps the notice attached to the
+        # session rather than to one document.
+        self.page.on("load", lambda *_: self._paint_banner())
 
     # ----------------------------------------------------------- lifecycle --
 
@@ -158,6 +239,12 @@ class BrowserSurface:
             texts = []
             for index in range(found.count()):
                 item = found.nth(index)
+                if item.get_attribute(BANNER_MARKER) is not None:
+                    # Our own handoff banner. It matches this selector by
+                    # construction — it is fixed-position, which is how a modal is
+                    # recognised here — and reporting it would pause the run a
+                    # second time over a notice the engine painted itself.
+                    continue
                 if item.is_visible():
                     texts.append((item.inner_text() or "").strip())
             if not texts:
@@ -187,6 +274,62 @@ class BrowserSurface:
                 break
         title = title.strip()
         return title if title and self.text_present(title) else None
+
+    # --------------------------------------------------------- handoff UI --
+
+    def show_banner(self, headline, lines=(), title=None, choices=()):
+        """Paint the handoff notice onto the live page (DESIGN §9, channel 1).
+
+        The operator is looking at the browser, not at the terminal, so this is
+        the channel that does the real work — and the rewritten document title is
+        the half that survives the window being minimised, since that is what the
+        taskbar shows.
+
+        Held on the surface rather than written once, because a navigation
+        destroys it and a paused run is precisely when someone is navigating.
+
+        `choices` puts the handback where the operator's hands already are. That
+        is not a convenience: the first human run of this seam ended with the
+        operator pressing the application's own confirm button, because they were
+        in a browser and had just been asked to confirm something. Giving them the
+        right thing to click is a better answer than telling them not to click the
+        wrong one.
+        """
+        self._banner = {"headline": headline, "lines": list(lines), "title": title,
+                        "choices": [{"value": value, "label": label}
+                                    for value, label in choices]}
+        self._paint_banner()
+
+    def banner_decision(self):
+        """Which banner button the operator pressed, or None. Polled, not awaited:
+        the console has to stay responsive to the terminal at the same time."""
+        try:
+            return self.page.evaluate(_READ_DECISION)
+        except Exception:
+            return None
+
+    def clear_banner(self):
+        """Take it down and restore the page's own title.
+
+        Called before the engine looks at the page again, never merely at the end
+        of the run: the banner is fixed-position furniture, and a modal detector
+        that finds it would report an unknown dialog and pause over our own notice.
+        """
+        self._banner = None
+        try:
+            self.page.evaluate(_CLEAR_BANNER)
+        except Exception:
+            # A closed or navigating page has nothing to clean up, and failing to
+            # remove a banner is never worth ending a run over.
+            pass
+
+    def _paint_banner(self):
+        if not self._banner:
+            return
+        try:
+            self.page.evaluate(_SHOW_BANNER, self._banner)
+        except Exception:
+            pass
 
     def screenshot(self, path):
         from pathlib import Path

@@ -30,6 +30,7 @@ from .. import config
 from ..contracts import validate_result
 from ..evidence import RunEvidence, utc_now
 from ..executor import TargetNotFound
+from ..hitl import RESUME, Handoff, InterventionRequest
 from ..policy import PolicyViolation, mask, shape_of
 from . import tools
 from .prompts import SYSTEM_PROMPT, opening_message
@@ -61,10 +62,14 @@ class DiscoveryResult:
 class DiscoveryLoop:
 
     def __init__(self, surface, client, evidence=None, capability_name="discovered",
-                 model=None, max_steps=None, wall_clock_seconds=None):
+                 model=None, max_steps=None, wall_clock_seconds=None, console=None):
         self.surface = surface
         self.client = client
         self.evidence = evidence or RunEvidence()
+        # The same seam replay uses (§9). `stuck` is a trigger into
+        # PAUSED_FOR_HUMAN exactly like an unknown dialog is, and the console
+        # being an interface is what lets one handoff path serve both callers.
+        self.handoff = Handoff(surface, self.evidence, console)
         self.capability_name = capability_name
         self.model = model or config.model()
         self.max_steps = max_steps or config.MAX_STEPS
@@ -217,6 +222,15 @@ class DiscoveryLoop:
                 outcome = self._fail(step_number, call.name, "the action to complete",
                                      f"{type(error).__name__}: {error}")
                 break
+
+            if outcome is not None and outcome.get("kind") == "stuck":
+                # An agent that declares itself stuck is §9's discovery trigger.
+                # If a human unblocks the page, the run continues rather than
+                # ending — the model gets a fresh observation and carries on from
+                # a situation it could not resolve alone.
+                unblocked = self._offer_stuck(outcome, screenshot)
+                if unblocked:
+                    outcome, correction = None, unblocked
 
             if outcome is not None:
                 break
@@ -419,6 +433,41 @@ class DiscoveryLoop:
 
     # ----------------------------------------------------------- envelope --
 
+    def _offer_stuck(self, outcome, screenshot):
+        """Hand a blocked agent to a human. Returns what to tell the model, or None.
+
+        The screenshot is the one already taken of the page the agent was looking
+        at when it gave up, rather than a fresh capture: it is the image that
+        matches the blocker being described.
+        """
+        params = outcome["params"]
+        step = outcome["step"]
+        request = InterventionRequest(
+            run_id=self.evidence.run_id,
+            capability=self.capability_name,
+            step=step,
+            steps_total=self.max_steps,
+            reason="AGENT_STUCK",
+            detail=params["blocker_description"],
+            requested_action=params["requested_action"],
+            screenshot=str(screenshot or ""),
+            # The agent is stuck on the page it is already on, so the human acts
+            # there and the model then re-observes. Nothing is re-sent.
+            when="after_step",
+        )
+        if self.handoff.offer(request) != RESUME:
+            return None
+        self.handoff.resumed(step)
+
+        did = (self.handoff.pauses[-1]["human_actions"] or [{}])[0].get(
+            "summary", "no observable change")
+        # `resumed`, not `verified`: a flow still being discovered has no
+        # checkpoint to re-check, and the record must not claim one was.
+        self.handoff.resolve(step, "resumed")
+        return (f"A human operator took control at this point and acted on the page: "
+                f"{did}. Control is back with you. Look at the current observation "
+                f"before deciding anything — it may no longer match what blocked you.")
+
     def _envelope(self, outcome, started_at):
         kind = outcome.get("kind")
         common = {
@@ -437,6 +486,8 @@ class DiscoveryLoop:
         fingerprint = self.surface.app_fingerprint()
         if fingerprint:
             common["app_fingerprint_observed"] = fingerprint
+        if self.handoff.pauses:
+            common["intervention_record"] = self.handoff.record()
 
         if kind == "done":
             common.update(status="SUCCESS", payload={

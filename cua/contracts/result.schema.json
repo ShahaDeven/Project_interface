@@ -171,15 +171,48 @@
     "intervention_record": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["paused_at_step", "control_returned_at", "human_actions", "post_resume_checkpoint"],
-      "description": "What happened while a human held control. Written on resume so the audit trail covers the manual segment too, not just the automated one.",
+      "required": ["interventions"],
+      "description": "What happened while a human held control. Written on resume so the audit trail covers the manual segment too, not just the automated one. A list rather than a single entry: a capability with both a mutating and an irreversible step pauses twice unattended, and a run can pause repeatedly on one step when an operator resumes without having changed anything — discarding those loses exactly the entries an audit exists to keep.",
       "properties": {
-        "operator": { "type": "string", "description": "Who took over." },
+        "operator": { "type": "string", "description": "Who took over. Per run rather than per pause: the same person answers the prompt they are sitting at." },
+        "interventions": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/intervention" }
+        }
+      }
+    },
+
+    "intervention": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["paused_at_step", "reason", "when", "requested_action",
+                   "paused_at", "control_returned_at", "decision", "resolution",
+                   "human_actions"],
+      "properties": {
         "paused_at_step": { "type": "integer", "minimum": 1 },
+        "reason": {
+          "enum": ["UNEXPECTED_DIALOG", "SESSION_EXPIRED", "IRREVERSIBLE_STEP",
+                   "MUTATION_NOT_APPROVED", "AGENT_STUCK"]
+        },
+        "when": {
+          "enum": ["before_step", "after_step"],
+          "description": "Where the pause sits relative to the action, because the two resume differently. A risk gate pauses before_step: the step has not run, so resuming runs it. A dialog or expired session pauses after_step: the step ran, so resuming re-judges the page it landed on and never re-sends the action."
+        },
+        "requested_action": { "type": "string", "minLength": 1 },
+        "paused_at": { "type": "string", "format": "date-time" },
         "control_returned_at": { "type": "string", "format": "date-time" },
+        "decision": {
+          "enum": ["resume", "abandon"],
+          "description": "What the operator answered. 'abandon' includes there having been no console to ask, which is deliberate: an unattended run does not get to approve its own mutations, and the record should not imply someone declined."
+        },
+        "resolution": {
+          "enum": ["verified", "resumed", "paused_again", "not_resumed", "business_outcome", "failure"],
+          "description": "How the handoff ended. This is what makes 'never blind-resume' auditable rather than merely implemented: an operator who answered without acting leaves a paused_again behind. 'verified' means a checkpoint was re-checked and held; 'resumed' means control came back and the run continued with no checkpoint to re-check, which is every discovery handoff, since a flow still being discovered has none yet. The two are separate so the record never claims a verification that did not happen."
+        },
         "human_actions": {
           "type": "array",
-          "description": "Observed state transitions while control was HUMAN. Captured, not self-reported.",
+          "description": "Observed state transitions while control was HUMAN — captured, not self-reported. One entry per handoff: the engine is blocked on the operator while they work, and instrumenting the page to record keystrokes would capture credentials into the trace, which §8 makes structurally impossible everywhere else. Full before/after DOM snapshots live in evidence; this carries the summary.",
           "items": {
             "type": "object",
             "additionalProperties": false,
@@ -195,7 +228,7 @@
           "type": "object",
           "additionalProperties": false,
           "required": ["condition", "value", "passed"],
-          "description": "Re-verified before continuing. Never blind-resume: if this fails the run pauses again rather than acting on an assumed state.",
+          "description": "Re-verified before continuing. Never blind-resume: if this fails the run pauses again rather than acting on an assumed state. Absent when the operator abandoned, and when the step resumed into declares no checkpoint of its own.",
           "properties": {
             "condition": { "enum": ["text_present", "url_matches"] },
             "value": { "type": "string", "minLength": 1 },

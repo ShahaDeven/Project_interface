@@ -57,6 +57,7 @@ def cmd_discover(args):
     from .agent import DiscoveryLoop
     from .evidence import RunEvidence
     from .executor import BrowserSurface
+    from .hitl import TerminalConsole
     from .policy import Allowlist, PolicyViolation
 
     # Cheapest checks first, in cost order: an off-allowlist target, a missing key
@@ -80,8 +81,11 @@ def cmd_discover(args):
     with sync_playwright() as playwright:
         surface = BrowserSurface(playwright, headless=args.headless)
         try:
+            # `stuck` is §9's discovery trigger: with an operator present the run
+            # can be unblocked and continue instead of ending there.
             loop = DiscoveryLoop(surface, client, evidence=evidence,
-                                 capability_name=args.save_as)
+                                 capability_name=args.save_as,
+                                 console=TerminalConsole())
             result = loop.run(args.goal, args.target)
         finally:
             surface.close()
@@ -150,6 +154,7 @@ def cmd_replay(args):
 
     from .evidence import RunEvidence
     from .executor import BrowserSurface
+    from .hitl import TerminalConsole
     from .policy import Allowlist, PolicyViolation
     from .replay import InputError, ReplayEngine, RuntimeConfig, bind_inputs, parse_params
 
@@ -179,6 +184,17 @@ def cmd_replay(args):
         print(f"warning: no runtime profile for '{app}'; error pages and session "
               f"expiry cannot be recognised", file=sys.stderr)
 
+    # A pause needs both an operator to ask and a window for them to act in. Absent
+    # either, the run still pauses and still reports it — the intervention just
+    # stays terminal, which is the honest outcome for an unattended run.
+    console = None if args.no_console else TerminalConsole()
+    if console and not console.available():
+        print("note: not a terminal, so an intervention will be reported rather "
+              "than waited on", file=sys.stderr)
+    elif console and args.headless:
+        print("note: --headless leaves an operator nothing to take over; run headed "
+              "if you expect to hand off", file=sys.stderr)
+
     evidence = RunEvidence()
     print(f"Replay {args.capability} v{artifact['capability']['version']}  "
           f"run {evidence.run_id}")
@@ -189,7 +205,8 @@ def cmd_replay(args):
         try:
             engine = ReplayEngine(surface, artifact, evidence=evidence, runtime=runtime,
                                   approve_mutations=args.approve_mutations,
-                                  screenshots=args.screenshots, chaos=args.chaos)
+                                  screenshots=args.screenshots, chaos=args.chaos,
+                                  console=console)
             result = engine.run(params, args.target)
         finally:
             surface.close()
@@ -205,6 +222,9 @@ def cmd_replay(args):
         # whoever is watching, not a status the caller has to branch on.
         print(f"Recovered: {recovery['condition']} at step {recovery['step']} "
               f"({', '.join(f'{k}={v}' for k, v in recovery.items() if k not in ('condition', 'step'))})")
+    for entry in envelope.get("intervention_record", {}).get("interventions", []):
+        print(f"Handed over: step {entry['paused_at_step']} ({entry['reason']}) "
+              f"-> {entry['decision']}, {entry['resolution']}")
     if result.outputs:
         print("Outputs:")
         for name, value in result.outputs.items():
@@ -272,6 +292,9 @@ def build_parser():
     replay.add_argument("--chaos", choices=["slow", "session", "dialog", "error"],
                         help="demo scaffolding: arm a runtime condition in the target "
                              "app from this run's own browser session, mid-flow")
+    replay.add_argument("--no-console", action="store_true",
+                        help="never pause for a human; report the intervention and "
+                             "stop, as an unattended run would")
     replay.set_defaults(func=cmd_replay)
 
     return parser

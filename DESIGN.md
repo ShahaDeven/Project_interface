@@ -347,6 +347,68 @@ When the run later completes, its final result carries an `intervention_record`:
 who took over, at which step, captured human actions, control-return time, post-resume
 checkpoint result.
 
+**Amended during 4b — the record is a list, not a single entry.** This was written
+assuming one handoff per run, which the demo has and `open_sub_account` does not:
+that capability has a `mutating` step and an `irreversible` one, so an unattended
+invocation pauses twice, and a run may also pause repeatedly on the same step when
+an operator resumes without having changed anything. Reporting one of those and
+discarding the rest loses exactly the entries an audit exists to keep — a human
+approving a write to a member's account. So the record carries a per-run
+`operator` and an `interventions` array:
+
+```json
+"intervention_record": {
+  "operator": "e.okafor",
+  "interventions": [
+    { "paused_at_step": 11, "reason": "MUTATION_NOT_APPROVED", "when": "before_step",
+      "requested_action": "Re-invoke with --approve-mutations, or approve this step.",
+      "paused_at": "...", "control_returned_at": "...",
+      "decision": "resume", "resolution": "verified",
+      "human_actions": [ { "recorded_at": "...", "url": "...",
+                           "summary": "no observable change" } ],
+      "post_resume_checkpoint": { "condition": "text_present",
+                                  "value": "Confirm Sub-Account", "passed": true } }
+  ]
+}
+```
+
+Two fields carry the weight. `when` is `before_step` for a risk gate — the step had
+not run, so resuming means running it — and `after_step` for a dialog or an expired
+session, where the step *did* run and resuming means re-judging the page it landed
+on. `resolution` is how the handoff ended (`verified`, `resumed`, `paused_again`,
+`not_resumed`, or the terminal kind that followed), which is what makes
+"never blind-resume" auditable rather than merely implemented: an operator who
+answered without acting leaves a `paused_again` behind. `verified` means a
+checkpoint was re-checked and held; `resumed` means control came back with no
+checkpoint to re-check, which is every discovery handoff, since a flow still
+being discovered has none yet. Separate values so the record never claims a
+verification that did not happen.
+
+**`HUMAN_PERFORMED_STEP` — a recovered condition that belongs to the handoff, not
+to the app.** §6 enumerates the app-level runtime conditions; this one is added
+here because it can only arise while a human holds control. When a step the
+operator *approved* then fails to resolve its target, the engine checks that
+step's own checkpoint: if the state the recording expected is already present,
+the person did it themselves, and the action is logged and **not re-sent**. Same
+rule as a timed-out action, reached from the other direction — re-check, never
+re-send. It is deliberately narrow: resolution is attempted first, so a control
+still on the page is simply clicked, and a step with no checkpoint fails loudly
+rather than guessing, because "already done" and "never happened" are otherwise
+the same observation and this is the `irreversible` step.
+
+Not a hypothetical. The first human run of this seam ended exactly this way: the
+operator was asked to confirm, was standing at a browser showing a confirm
+button, and pressed it. The instruction now differs per pause kind and the banner
+carries the buttons, but wording is mitigation and the checkpoint rule is the
+guarantee.
+
+**Human actions are captured as observed state transitions, not as keystrokes.**
+One entry per handoff — the page before control transferred against the page after
+it returned — because the engine is blocked on the operator while they work, and
+because instrumenting the page to record what they typed would capture credentials
+into the trace, which §8 makes structurally impossible everywhere else. The full
+before/after DOM snapshots go to evidence; the envelope carries the summary.
+
 **HARD_FAILURE** — maximum debuggability; **no remediation suggestions** (if the engine
 knew the fix, it would be a recoverable condition):
 ```json
@@ -423,6 +485,31 @@ Run states: `RUNNING → PAUSED_FOR_HUMAN → RESUMING → (terminal)`.
    checkpoint (or the pre-pause expected state) before continuing — never blind-resume.
    If verification fails → back to PAUSED_FOR_HUMAN with a new request.
 6. Final result includes the `intervention_record`.
+
+**TODO — decide before building 4a: how far does "persist run state" go?**
+
+Step 1 says the pause persists artifact position, inputs and trace. That leaves a
+question this document has not answered: is the pause record *forensics*, or is it
+a **resume token another process could pick up**?
+
+The two readings cost very different amounts of Day 4:
+
+- **Forensics (same-process resume).** The pause record is written so the pause is
+  inspectable and auditable; the run itself resumes in the process that paused,
+  driving the browser it already owns. Cheap, and consistent with the rest of §9.
+- **Cross-process resume.** A second process reads the record and continues the
+  run. But §9's central requirement is that the human operates the *same live
+  browser session* — so a second process would have to re-attach to a browser the
+  first process owns and is blocking on. That is a materially larger problem
+  (session handover, ownership of the Playwright connection, what happens when the
+  original process dies) and it is not what makes the handoff *real*; the same
+  live session is.
+
+Leaning to forensics/same-process, with the limitation stated in REPORT rather than
+left looking like an oversight — an operator console that outlives the run is a
+production concern, and the seam is what is being demonstrated. **Not yet decided.**
+Whichever way it goes, it changes what the pause record must contain, so it is
+settled before the state machine is written, not after.
 
 ---
 

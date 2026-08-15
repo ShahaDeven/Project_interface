@@ -243,6 +243,53 @@ class TestLoop:
         assert payload["control"] == "HUMAN"
         assert payload["session_id"] == "browser_sess_fake"
 
+    def test_an_operator_can_unblock_a_stuck_agent(self, evidence):
+        """§9 lists `stuck` as a discovery trigger into PAUSED_FOR_HUMAN, and the
+        console being an interface is what lets one handoff path serve discovery
+        and replay alike. With someone there, being stuck stops ending the run."""
+        from cua.hitl import RESUME, ScriptedConsole
+
+        console = ScriptedConsole(RESUME)
+        result, _, _ = run_loop([
+            tool_use("stuck", reason="UNEXPECTED_DIALOG",
+                     blocker_description="A maintenance notice covers the page.",
+                     requested_action="Dismiss it, then resume."),
+            tool_use("done", summary="read it", outputs={},
+                     success_evidence="Member Profile"),
+        ], evidence, console=console)
+
+        assert result.status == "SUCCESS", "the human unblocked it; the run went on"
+        assert [r.reason for r in console.requests] == ["AGENT_STUCK"]
+
+        record = result.envelope["intervention_record"]["interventions"][0]
+        assert record["paused_at_step"] == 1
+        assert record["decision"] == "resume"
+        assert record["resolution"] == "resumed", \
+            "discovery has no checkpoint yet, so nothing was verified"
+
+    def test_the_model_is_told_a_human_intervened(self, evidence):
+        """It has to re-observe rather than reason from the page that blocked it."""
+        from cua.hitl import RESUME, ScriptedConsole
+
+        _, _, client = run_loop([
+            tool_use("stuck", reason="X", blocker_description="blocked",
+                     requested_action="fix it"),
+            tool_use("done", summary="", outputs={}, success_evidence="Member Profile"),
+        ], evidence, console=ScriptedConsole(RESUME))
+
+        sent = json.dumps(client.requests[-1]["messages"], default=str)
+        assert "A human operator took control" in sent
+
+    def test_without_a_console_stuck_still_ends_the_run(self, evidence):
+        """Unattended discovery has nobody to unblock it, and must not pretend
+        otherwise."""
+        result, _, _ = run_loop([
+            tool_use("stuck", reason="X", blocker_description="blocked",
+                     requested_action="fix it"),
+        ], evidence)
+        assert result.status == "NEEDS_INTERVENTION"
+        assert "intervention_record" not in result.envelope
+
     def test_step_limit_is_enforced_by_the_loop(self, evidence):
         """The model cannot see or extend its own budget."""
         result, _, client = run_loop(

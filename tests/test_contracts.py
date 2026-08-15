@@ -324,18 +324,31 @@ class TestResultEnvelope:
             validate_result(envelope(status="HARD_FAILURE", payload=payload))
 
     def test_intervention_record_validates(self):
+        """A list since 4b: a capability with a mutating step and an irreversible
+        one pauses twice, so a single-entry record would drop the handoff that
+        approved a write. `operator` is per run — the same person answers the
+        prompt they are sitting at."""
         assert validate_result(envelope(intervention_record={
             "operator": "E. Okafor",
-            "paused_at_step": 4,
-            "control_returned_at": "2026-08-14T09:31:40Z",
-            "human_actions": [{
-                "recorded_at": "2026-08-14T09:31:22Z",
-                "url": "http://127.0.0.1:5000/member/23456",
-                "summary": "Dismissed the maintenance notice.",
+            "interventions": [{
+                "paused_at_step": 4,
+                "reason": "UNEXPECTED_DIALOG",
+                "when": "after_step",
+                "requested_action": "Dismiss or defer it, then resume.",
+                "paused_at": "2026-08-14T09:31:12Z",
+                "control_returned_at": "2026-08-14T09:31:40Z",
+                "decision": "resume",
+                "resolution": "verified",
+                "human_actions": [{
+                    "recorded_at": "2026-08-14T09:31:22Z",
+                    "url": "http://127.0.0.1:5000/member/23456",
+                    "summary": "Dismissed the maintenance notice.",
+                }],
+                "post_resume_checkpoint": {
+                    "condition": "text_present", "value": "Member Profile",
+                    "passed": True,
+                },
             }],
-            "post_resume_checkpoint": {
-                "condition": "text_present", "value": "Member Profile", "passed": True,
-            },
         }))
 
     def test_unknown_status_is_rejected(self):

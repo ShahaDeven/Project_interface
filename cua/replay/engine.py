@@ -33,6 +33,7 @@ from dataclasses import dataclass, field
 from ..evidence import RunEvidence, utc_now
 from ..executor import ActionTimeout, TargetNotFound
 from ..executor.surface import Element
+from ..hitl import RESUME, Handoff, InterventionRequest
 from ..policy import PolicyViolation
 from .binding import ParseError, bind_inputs, parse_value, resolve
 
@@ -100,7 +101,8 @@ def element_for(target):
 class ReplayEngine:
 
     def __init__(self, surface, artifact, evidence=None, runtime=None,
-                 approve_mutations=False, screenshots="failure", chaos=None):
+                 approve_mutations=False, screenshots="failure", chaos=None,
+                 console=None):
         self.surface = surface
         self.artifact = artifact
         self.evidence = evidence or RunEvidence()
@@ -108,9 +110,14 @@ class ReplayEngine:
         self.approve_mutations = approve_mutations
         self.screenshots = screenshots
         self.chaos = chaos
+        # No console means no one to hand control to, so an intervention stays
+        # terminal — which is the behaviour before any of this existed. An
+        # unattended run does not get to approve its own mutations.
+        self.handoff = Handoff(surface, self.evidence, console)
         self._chaos_armed = False
         self._credentials_submitted = False
         self._timed_out_at = None
+        self._last_checkpoint = None
         self.outputs = {}
         self.steps_completed = 0
         self.strategy_log = []
@@ -141,26 +148,9 @@ class ReplayEngine:
 
         for step in steps:
             try:
-                self._gate(step)
-                self._maybe_arm_chaos(step, base_url)
-                try:
-                    self._execute(step, inputs, base_url)
-                except ActionTimeout as slow:
-                    # Not a failure, and explicitly not a reason to re-send: the
-                    # action may have gone through and be processing. Fall through
-                    # to checkpoint verification, whose retry loop decides whether
-                    # the page merely arrived late.
-                    self._timed_out_at = step["id"]
-                    self.evidence.trace("action_timeout", step=step["id"],
-                                        detail=str(slow))
-                self.steps_completed += 1
-                outcome = self._settle(step, inputs, base_url)
+                outcome = self._step(step, inputs, base_url)
                 if outcome:
                     break
-                continue
-            except RiskRefused as refusal:
-                outcome = self._intervention(step, refusal)
-                break
             except (StepFailure, TargetNotFound, PolicyViolation, ParseError) as failure:
                 outcome = self._failure(step, failure)
                 break
@@ -182,6 +172,146 @@ class ReplayEngine:
 
     # ----------------------------------------------------------- one step --
 
+    def _step(self, step, inputs, base_url):
+        """One step, including any pause it triggers (§9).
+
+        The two pauses resume differently and the difference is the whole reason
+        this is one function rather than two branches somewhere far apart:
+
+        A **risk gate pauses before the action**, so the step has not run and
+        resuming means run it now — without re-gating, because approval was given
+        for this specific step.
+
+        A **dialog or an expired session pauses after the action**, so the step has
+        run and resuming means re-judge the page it landed on. The action is never
+        re-sent. `_settle` is simply asked again, which is also what makes "never
+        blind-resume" fall out for free: an operator who answers without having
+        changed anything gets the same intervention back, and the handoff bounds
+        how many times that can happen before the run stops.
+
+        Returns a terminal outcome, or None to continue.
+        """
+        approved = False
+        try:
+            self._gate(step)
+        except RiskRefused as refusal:
+            pause = self._intervention(step, refusal, when="before_step")
+            if not self._offer(pause, step):
+                return pause
+            approved = True
+
+        self._maybe_arm_chaos(step, base_url)
+        try:
+            self._execute(step, inputs, base_url)
+        except ActionTimeout as slow:
+            # Not a failure, and explicitly not a reason to re-send: the action may
+            # have gone through and be processing. Fall through to checkpoint
+            # verification, whose retry loop decides whether the page merely
+            # arrived late.
+            self._timed_out_at = step["id"]
+            self.evidence.trace("action_timeout", step=step["id"], detail=str(slow))
+        except TargetNotFound:
+            if not (approved and self._performed_by_human(step, inputs, base_url)):
+                raise
+        self.steps_completed += 1
+
+        outcome = self._settle(step, inputs, base_url)
+        self._resolve(step, outcome)
+        while outcome and outcome["kind"] == "intervention":
+            if not self._offer(outcome, step):
+                return outcome
+            outcome = self._settle(step, inputs, base_url)
+            self._resolve(step, outcome)
+        return outcome
+
+    def _resolve(self, step, outcome):
+        """Tell the handoff how the page read after control came back (§7).
+
+        A no-op unless this step paused. The value is what makes "never
+        blind-resume" auditable rather than merely implemented: an operator who
+        answered without changing anything leaves a `paused_again` in the record.
+        """
+        if outcome is None:
+            resolution = "verified"
+        elif outcome["kind"] == "intervention":
+            resolution = "paused_again"
+        elif outcome["kind"] == "business_outcome":
+            resolution = "business_outcome"
+        else:
+            resolution = "failure"
+
+        checkpoint = self._last_checkpoint
+        if checkpoint and checkpoint["step"] == step["id"]:
+            checkpoint = {key: value for key, value in checkpoint.items()
+                          if key != "step"}
+        else:
+            checkpoint = None
+        self.handoff.resolve(step["id"], resolution, checkpoint)
+
+    def _performed_by_human(self, step, inputs, base_url):
+        """Did the operator carry out the step themselves while they held control?
+
+        Asked only after a gate they approved, and only once the target has
+        already failed to resolve — that ordering is what makes it safe. If the
+        button is still there the click happens normally; this is reached solely
+        when the control is gone, which on a confirmation screen usually means it
+        has already been pressed.
+
+        The answer is the step's own checkpoint. If the state the recording
+        expected is present, the action happened, and the one thing that must not
+        follow is doing it again: this is the `irreversible` step, so a re-send is
+        a second sub-account on a member's record. Same rule as a timed-out
+        action, arrived at from the other direction — re-check, never re-send.
+
+        Requires a checkpoint. Without one there is no way to tell "already done"
+        from "never happened", and guessing between those two on an irreversible
+        step is not a trade worth making, so it fails loudly instead.
+        """
+        checkpoint = step.get("checkpoint")
+        if not checkpoint:
+            return False
+        expected = resolve(checkpoint["value"], inputs, base_url)
+        if not self._holds(checkpoint["condition"], expected):
+            return False
+        self.evidence.trace("performed_by_human", step=step["id"],
+                            action=step["action"], condition=checkpoint["condition"],
+                            value=expected)
+        self._recovered("HUMAN_PERFORMED_STEP", step, action="not re-sent")
+        return True
+
+    def _offer(self, pause, step):
+        """Put a live intervention in front of the operator console.
+
+        True when the run may continue. False covers both "they said no" and
+        "there was nobody to ask", and the caller treats them identically — a
+        pause nobody answered is still a pause, and it still ends the run with the
+        same NEEDS_INTERVENTION payload it always did.
+        """
+        refusal = pause["refusal"]
+        capability = self.artifact["capability"]
+        step_id = step["id"]
+        when = pause.get("when", "after_step")
+        # Every pause, however it was reached, and whether or not anyone is there
+        # to answer it. The question a reviewer asks is "did this run ever stop
+        # and wait" — that has one answer, so it has one event.
+        self.evidence.trace("paused_for_human", step=step_id, reason=refusal.reason,
+                            detail=refusal.detail, when=when)
+        request = InterventionRequest(
+            run_id=self.evidence.run_id,
+            capability=capability["name"],
+            step=step_id,
+            steps_total=len(self.artifact["steps"]),
+            reason=refusal.reason,
+            detail=refusal.detail,
+            requested_action=refusal.requested_action,
+            screenshot=pause.get("screenshot", ""),
+            when=when,
+        )
+        if self.handoff.offer(request) != RESUME:
+            return False
+        self.handoff.resumed(step_id)
+        return True
+
     def _gate(self, step):
         """Risk gates (§8). Conservative by design, and stated as such in REPORT.
 
@@ -195,16 +325,23 @@ class ReplayEngine:
                 "IRREVERSIBLE_STEP",
                 f"Step {step['id']} ({step['action']}) is irreversible and always "
                 f"requires explicit human confirmation.",
-                "Confirm this specific action, or abandon the run.")
+                # Says who does the clicking, because "confirm this action" reads
+                # to a person standing at a live browser as "go and click it".
+                "Approve here and the automation performs this step, or abandon "
+                "the run.")
         if risk == "mutating" and not self.approve_mutations:
             raise RiskRefused(
                 "MUTATION_NOT_APPROVED",
                 f"Step {step['id']} ({step['action']}) changes state and this "
                 f"invocation carries no standing approval.",
-                "Re-invoke with --approve-mutations, or approve this step.")
+                "Approve here and the automation performs this step, or abandon "
+                "and re-invoke with --approve-mutations.")
 
     def _execute(self, step, inputs, base_url, event="step"):
         action = step["action"]
+        # One writer at a time. Never expected to fire — which is the point of
+        # tracking control explicitly rather than trusting the call order.
+        self.handoff.check_may_act(action)
         started = time.monotonic()
         self.surface.last_strategy = None
         timeout = None
@@ -339,6 +476,8 @@ class ReplayEngine:
                 "kind": "intervention",
                 "step": step,
                 "screenshot": screenshot,
+                # After the action: the step ran, so resuming re-judges this page.
+                "when": "after_step",
                 "refusal": RiskRefused(
                     "UNEXPECTED_DIALOG",
                     f"An unrecognised dialog appeared after step {step['id']}: "
@@ -393,10 +532,15 @@ class ReplayEngine:
                                     action="re-checked" if late else "retried")
                 self.evidence.trace("checkpoint", step=step["id"], passed=True,
                                     condition=condition, value=expected)
+                self._last_checkpoint = {"step": step["id"], "condition": condition,
+                                         "value": expected, "passed": True}
                 return None
             if attempt < attempts:
                 time.sleep(self.runtime.slow_load.delay_before(attempt))
                 self.surface.settle()
+
+        self._last_checkpoint = {"step": step["id"], "condition": condition,
+                                 "value": expected, "passed": False}
 
         if self._session_expired():
             if self._recover_session(step, inputs, base_url, condition, expected):
@@ -407,6 +551,7 @@ class ReplayEngine:
                 " and no re-login routine is defined for this app"
             return {
                 "kind": "intervention", "step": step, "screenshot": screenshot,
+                "when": "after_step",
                 "refusal": RiskRefused(
                     "SESSION_EXPIRED",
                     f"The session expired before step {step['id']} could be "
@@ -535,13 +680,15 @@ class ReplayEngine:
         return {"kind": "business_outcome", "step": step, "outcome": outcome,
                 "detail": detail, "screenshot": screenshot}
 
-    def _intervention(self, step, refusal):
+    def _intervention(self, step, refusal, when="after_step"):
+        """Build the intervention. The pause itself is traced in `_offer`, which
+        every trigger funnels through — tracing it here would have recorded a
+        risk gate as a pause and an unknown dialog as something else, when they
+        are the same event arrived at two ways."""
         screenshot = self.surface.screenshot(
             self.evidence.screenshot_path(f"intervention_step{step['id']:02d}"))
-        self.evidence.trace("paused_for_human", step=step["id"], reason=refusal.reason,
-                            detail=refusal.detail)
         return {"kind": "intervention", "step": step, "refusal": refusal,
-                "screenshot": screenshot}
+                "screenshot": screenshot, "when": when}
 
     def _failure(self, step, failure):
         expected = getattr(failure, "expected", "the step to complete")
@@ -590,6 +737,12 @@ class ReplayEngine:
                     f"recorded against {recorded}, ran against {fingerprint_seen}; "
                     f"locators may have drifted")
                 self.evidence.trace("drift", recorded=recorded, observed=fingerprint_seen)
+
+        if self.handoff.pauses:
+            # Carried on every terminal status, not just the successful ones: a run
+            # that stopped at a gate paused for a human just as much as one that
+            # was waved through, and the audit question is the same either way.
+            envelope["intervention_record"] = self.handoff.record()
 
         kind = outcome["kind"]
         if kind == "success":
