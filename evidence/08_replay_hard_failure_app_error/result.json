@@ -1,0 +1,28 @@
+{
+  "run_id": "run_20260816_102600",
+  "capability": "lookup_member_balance",
+  "capability_version": "1.0.0",
+  "mode": "replay",
+  "inputs": {
+    "member_number": "23456"
+  },
+  "started_at": "2026-08-16T14:26:01Z",
+  "ended_at": "2026-08-16T14:26:03Z",
+  "steps_completed": 4,
+  "steps_total": 7,
+  "llm_call_count": 0,
+  "evidence_path": "evidence/08_replay_hard_failure_app_error/",
+  "app_fingerprint_observed": "legacy-cu-portal@4.3.0",
+  "status": "HARD_FAILURE",
+  "payload": {
+    "failed_at_step": 4,
+    "action_attempted": "click",
+    "expected": "a working application page",
+    "observed": "the application returned an error page",
+    "strategies_tried": [
+      "label: Sign On"
+    ],
+    "screenshot": "evidence/08_replay_hard_failure_app_error/screenshots/failure_step04.png",
+    "dom_snapshot": "evidence/08_replay_hard_failure_app_error/failure_step04.html"
+  }
+}

@@ -19,7 +19,8 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 
-DEFAULT_ROOT = Path(__file__).resolve().parents[1] / "evidence"
+REPO_ROOT = Path(__file__).resolve().parents[1]
+DEFAULT_ROOT = REPO_ROOT / "evidence"
 
 
 def utc_now():
@@ -78,15 +79,32 @@ class RunEvidence:
 
     # ------------------------------------------------------------- reading --
 
+    def relative(self, path):
+        """A path as it should be *recorded*: repo-relative and forward-slashed.
+
+        Every path that reaches a result envelope or a trace goes through here.
+        Screenshots and DOM snapshots are written with absolute paths — they have
+        to be, or writing them would depend on the working directory — but an
+        absolute path in a committed envelope is both a leak of the author's
+        machine and useless to the reviewer reading it.
+
+        Relative to the repo rather than to `cwd`, so the value does not change
+        with where the command was run from. A run whose evidence lives outside
+        the repo keeps its absolute path, because a relative one would then be
+        relative to nothing the reader has; it is still forward-slashed, since a
+        backslash in JSON is an escape character before it is a path separator.
+        """
+        candidate = Path(path)
+        try:
+            return candidate.resolve().relative_to(REPO_ROOT).as_posix()
+        except ValueError:
+            return candidate.as_posix()
+
     @property
     def path(self):
         """Repo-relative, forward-slashed — this string goes into result envelopes
         and should not carry a Windows drive letter into a committed artifact."""
-        try:
-            relative = self.dir.resolve().relative_to(Path.cwd().resolve())
-        except ValueError:
-            relative = self.dir
-        return relative.as_posix() + "/"
+        return self.relative(self.dir) + "/"
 
     def read_trace(self):
         if not self._trace_path.exists():

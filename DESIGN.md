@@ -34,9 +34,12 @@ and its schema is the instruction set.
 
 - Python 3.11+, Playwright (Chromium, headed for demos)
 - Anthropic API (Claude) for discovery only; vision + tool use
-- Hand-rolled agent loop (~150 lines). Deliberate non-choice of LangGraph: single linear
-  agent, and the loop structure itself is under evaluation. (Production threshold where a
-  framework would earn its place: multiple concurrent capabilities, durable multi-agent state.)
+- Hand-rolled agent loop. Deliberate non-choice of LangGraph: single linear agent, and
+  the loop structure itself is under evaluation. (Production threshold where a framework
+  would earn its place: multiple concurrent capabilities, durable multi-agent state.)
+  *Estimated here at ~150 lines before it was written; it came out at 563, most of that
+  the stopping conditions, the redaction path and turning every surface error into a
+  result envelope rather than a traceback.*
 - Artifacts: JSON, validated by JSON Schema on save and on load
 - Target app: small Python server (Flask or stdlib), server-rendered HTML
 

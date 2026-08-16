@@ -1,0 +1,11 @@
+{"event": "run_started", "at": "2026-08-16T14:23:02Z", "mode": "replay", "capability": "lookup_member_balance", "capability_version": "1.0.0", "inputs": {"member_number": "67890"}, "base_url": "http://127.0.0.1:5000", "approve_mutations": false}
+{"event": "step", "at": "2026-08-16T14:23:03Z", "step": 1, "action": "navigate", "risk": "read_only", "strategy_used": null, "timed_out": false, "duration_ms": 562}
+{"event": "checkpoint", "at": "2026-08-16T14:23:03Z", "step": 1, "passed": true, "condition": "text_present", "value": "Operator Login"}
+{"event": "step", "at": "2026-08-16T14:23:03Z", "step": 2, "action": "type", "risk": "read_only", "strategy_used": "label: Operator ID", "timed_out": false, "duration_ms": 31}
+{"event": "step", "at": "2026-08-16T14:23:03Z", "step": 3, "action": "type", "risk": "read_only", "strategy_used": "label: Password", "timed_out": false, "duration_ms": 14}
+{"event": "step", "at": "2026-08-16T14:23:03Z", "step": 4, "action": "click", "risk": "read_only", "strategy_used": "label: Sign On", "timed_out": false, "duration_ms": 594}
+{"event": "checkpoint", "at": "2026-08-16T14:23:03Z", "step": 4, "passed": true, "condition": "text_present", "value": "Member Lookup"}
+{"event": "step", "at": "2026-08-16T14:23:03Z", "step": 5, "action": "type", "risk": "read_only", "strategy_used": "label: Member number", "timed_out": false, "duration_ms": 32}
+{"event": "step", "at": "2026-08-16T14:23:04Z", "step": 6, "action": "click", "risk": "read_only", "strategy_used": "label: Look Up", "timed_out": false, "duration_ms": 578}
+{"event": "business_outcome", "at": "2026-08-16T14:23:04Z", "step": 6, "outcome_code": "PERMISSION_DENIED", "detail": "After step 6 (click), the page matched 'Member outside your region'. The operator's region scope excludes this member. A correct answer about access rather than a broken run — the caller may route the request to a differently-scoped operator."}
+{"event": "run_finished", "at": "2026-08-16T14:23:04Z", "status": "BUSINESS_OUTCOME", "steps_completed": 6, "recoveries": []}

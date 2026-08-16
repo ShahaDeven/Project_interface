@@ -1,0 +1,53 @@
+{
+  "run_id": "run_20260816_102833",
+  "capability": "open_sub_account",
+  "capability_version": "1.0.0",
+  "mode": "replay",
+  "inputs": {
+    "member_number": "23456",
+    "account_type": "Holiday Club",
+    "account_nickname": "Vacation fund",
+    "initial_deposit": "150.00"
+  },
+  "started_at": "2026-08-16T14:28:34Z",
+  "ended_at": "2026-08-16T14:28:45Z",
+  "steps_completed": 13,
+  "steps_total": 13,
+  "llm_call_count": 0,
+  "evidence_path": "evidence/12_replay_handoff_irreversible_approved/",
+  "app_fingerprint_observed": "legacy-cu-portal@4.3.0",
+  "intervention_record": {
+    "interventions": [
+      {
+        "paused_at_step": 12,
+        "reason": "IRREVERSIBLE_STEP",
+        "when": "before_step",
+        "requested_action": "Approve here and the automation performs this step, or abandon the run.",
+        "paused_at": "2026-08-16T14:28:37Z",
+        "control_returned_at": "2026-08-16T14:28:44Z",
+        "decision": "resume",
+        "resolution": "verified",
+        "human_actions": [
+          {
+            "recorded_at": "2026-08-16T14:28:44Z",
+            "url": "http://127.0.0.1:5000/member/23456/sub-account/new",
+            "summary": "no observable change"
+          }
+        ],
+        "post_resume_checkpoint": {
+          "condition": "url_matches",
+          "value": "/member/23456/sub-account/confirm",
+          "passed": true
+        }
+      }
+    ],
+    "operator": "deven"
+  },
+  "status": "SUCCESS",
+  "payload": {
+    "outputs": {
+      "new_account_number": "SA-23456-69"
+    },
+    "checkpoint_verified": true
+  }
+}

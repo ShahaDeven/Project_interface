@@ -450,7 +450,7 @@ class DiscoveryLoop:
             reason="AGENT_STUCK",
             detail=params["blocker_description"],
             requested_action=params["requested_action"],
-            screenshot=str(screenshot or ""),
+            screenshot=self.evidence.relative(screenshot) if screenshot else "",
             # The agent is stuck on the page it is already on, so the human acts
             # there and the model then re-observes. Nothing is re-sent.
             when="after_step",

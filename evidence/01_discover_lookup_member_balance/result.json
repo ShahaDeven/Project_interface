@@ -1,0 +1,21 @@
+{
+  "run_id": "run_20260814_123223",
+  "capability": "lookup_member_balance",
+  "capability_version": "1.0.0",
+  "mode": "discovery",
+  "inputs": {},
+  "started_at": "2026-08-14T16:32:24Z",
+  "ended_at": "2026-08-14T16:32:43Z",
+  "steps_completed": 8,
+  "steps_total": 8,
+  "llm_call_count": 8,
+  "evidence_path": "evidence/01_discover_lookup_member_balance/",
+  "app_fingerprint_observed": "legacy-cu-portal@4.3.0",
+  "status": "SUCCESS",
+  "payload": {
+    "outputs": {
+      "savings_balance": "$4,523.18"
+    },
+    "checkpoint_verified": true
+  }
+}

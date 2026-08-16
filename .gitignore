@@ -26,14 +26,19 @@ htmlcov/
 
 # --- run output ---------------------------------------------------------------
 # Per-run evidence is disposable and heavy: screenshots, DOM snapshots and full
-# model transcripts, one directory per run. Ad-hoc runs stay local.
+# model transcripts, one directory per run. Live runs write to run_<timestamp>/
+# and stay local.
 evidence/run_*/
 *.log
 
-# The curated demo evidence set IS committed — it is the storytelling minimum
-# from DESIGN §10, and a reviewer who never runs the code should still be able to
-# read it. Promote a run by copying it under evidence/demo/.
-!evidence/demo/
+# The curated evidence set IS committed — the storytelling minimum from DESIGN
+# §10, so a reviewer who never runs the code can still read what happened.
+#
+# A run is published by renaming it to NN_<mode>_<scenario>/, which the rule above
+# deliberately does not match. The naming convention is therefore what decides
+# whether a run ships, and nothing has to be remembered: timestamped is
+# disposable, numbered is published. The number also makes `ls evidence/` print
+# the set in the order the story is meant to be read, on every OS.
 
 # --- editors / OS -------------------------------------------------------------
 .idea/
@@ -44,7 +49,6 @@ Thumbs.db
 desktop.ini
 
 # --- local only, not part of the submission -----------------------------------
-# Leading "/" anchors to the repo root (this file's directory). A leading "./" is
-# not valid gitignore syntax and silently matches nothing.
-/FOUND_GAPS.md
+# The brief itself is interface.ai's assessment material and not ours to
+# republish. Leading "/" anchors to the repo root, this file's directory.
 /Assignment A — Computer-Use Automation System.pdf

@@ -1,0 +1,15 @@
+{"event": "run_started", "at": "2026-08-16T14:24:33Z", "mode": "replay", "capability": "lookup_member_balance", "capability_version": "1.0.0", "inputs": {"member_number": "23456"}, "base_url": "http://127.0.0.1:5000", "approve_mutations": false}
+{"event": "step", "at": "2026-08-16T14:24:34Z", "step": 1, "action": "navigate", "risk": "read_only", "strategy_used": null, "timed_out": false, "duration_ms": 578}
+{"event": "checkpoint", "at": "2026-08-16T14:24:34Z", "step": 1, "passed": true, "condition": "text_present", "value": "Operator Login"}
+{"event": "step", "at": "2026-08-16T14:24:34Z", "step": 2, "action": "type", "risk": "read_only", "strategy_used": "label: Operator ID", "timed_out": false, "duration_ms": 31}
+{"event": "step", "at": "2026-08-16T14:24:34Z", "step": 3, "action": "type", "risk": "read_only", "strategy_used": "label: Password", "timed_out": false, "duration_ms": 30}
+{"event": "chaos_armed", "at": "2026-08-16T14:24:34Z", "mode": "slow", "before_step": 4}
+{"event": "step", "at": "2026-08-16T14:24:39Z", "step": 4, "action": "click", "risk": "read_only", "strategy_used": "label: Sign On", "timed_out": true, "duration_ms": 5016}
+{"event": "action_timeout", "at": "2026-08-16T14:24:39Z", "step": 4, "detail": "click on 'Sign On' exceeded 5000ms"}
+{"event": "recovered", "at": "2026-08-16T14:24:42Z", "condition": "SLOW_LOAD", "step": 4, "attempts": 2, "action": "re-checked"}
+{"event": "checkpoint", "at": "2026-08-16T14:24:42Z", "step": 4, "passed": true, "condition": "text_present", "value": "Member Lookup"}
+{"event": "step", "at": "2026-08-16T14:24:42Z", "step": 5, "action": "type", "risk": "read_only", "strategy_used": "label: Member number", "timed_out": false, "duration_ms": 15}
+{"event": "step", "at": "2026-08-16T14:24:43Z", "step": 6, "action": "click", "risk": "read_only", "strategy_used": "label: Look Up", "timed_out": false, "duration_ms": 593}
+{"event": "checkpoint", "at": "2026-08-16T14:24:43Z", "step": 6, "passed": true, "condition": "text_present", "value": "Member Profile"}
+{"event": "step", "at": "2026-08-16T14:24:43Z", "step": 7, "action": "read", "risk": "read_only", "strategy_used": "label: Savings balance", "timed_out": false, "duration_ms": 14}
+{"event": "run_finished", "at": "2026-08-16T14:24:43Z", "status": "SUCCESS", "steps_completed": 7, "recoveries": [{"condition": "SLOW_LOAD", "step": 4, "attempts": 2, "action": "re-checked"}]}

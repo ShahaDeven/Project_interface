@@ -1,0 +1,11 @@
+{"event": "run_started", "at": "2026-08-16T14:22:31Z", "mode": "replay", "capability": "lookup_member_balance", "capability_version": "1.0.0", "inputs": {"member_number": "99999"}, "base_url": "http://127.0.0.1:5000", "approve_mutations": false}
+{"event": "step", "at": "2026-08-16T14:22:32Z", "step": 1, "action": "navigate", "risk": "read_only", "strategy_used": null, "timed_out": false, "duration_ms": 562}
+{"event": "checkpoint", "at": "2026-08-16T14:22:32Z", "step": 1, "passed": true, "condition": "text_present", "value": "Operator Login"}
+{"event": "step", "at": "2026-08-16T14:22:32Z", "step": 2, "action": "type", "risk": "read_only", "strategy_used": "label: Operator ID", "timed_out": false, "duration_ms": 31}
+{"event": "step", "at": "2026-08-16T14:22:32Z", "step": 3, "action": "type", "risk": "read_only", "strategy_used": "label: Password", "timed_out": false, "duration_ms": 15}
+{"event": "step", "at": "2026-08-16T14:22:33Z", "step": 4, "action": "click", "risk": "read_only", "strategy_used": "label: Sign On", "timed_out": false, "duration_ms": 578}
+{"event": "checkpoint", "at": "2026-08-16T14:22:35Z", "step": 4, "passed": true, "condition": "text_present", "value": "Member Lookup"}
+{"event": "step", "at": "2026-08-16T14:22:35Z", "step": 5, "action": "type", "risk": "read_only", "strategy_used": "label: Member number", "timed_out": false, "duration_ms": 30}
+{"event": "step", "at": "2026-08-16T14:22:36Z", "step": 6, "action": "click", "risk": "read_only", "strategy_used": "label: Look Up", "timed_out": false, "duration_ms": 562}
+{"event": "business_outcome", "at": "2026-08-16T14:22:36Z", "step": 6, "outcome_code": "MEMBER_NOT_FOUND", "detail": "After step 6 (click), the page matched 'No member matches this number'. Legitimate result: no member holds that number. The caller decides whether to re-prompt or refer the case. Not a failure of the automation."}
+{"event": "run_finished", "at": "2026-08-16T14:22:36Z", "status": "BUSINESS_OUTCOME", "steps_completed": 6, "recoveries": []}

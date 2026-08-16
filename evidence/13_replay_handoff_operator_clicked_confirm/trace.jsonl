@@ -1,0 +1,27 @@
+{"event": "run_started", "at": "2026-08-16T14:29:00Z", "mode": "replay", "capability": "open_sub_account", "capability_version": "1.0.0", "inputs": {"member_number": "23456", "account_type": "Holiday Club", "account_nickname": "Vacation fund", "initial_deposit": "150.00"}, "base_url": "http://127.0.0.1:5000", "approve_mutations": true}
+{"event": "step", "at": "2026-08-16T14:29:01Z", "step": 1, "action": "navigate", "risk": "read_only", "strategy_used": null, "timed_out": false, "duration_ms": 562}
+{"event": "checkpoint", "at": "2026-08-16T14:29:01Z", "step": 1, "passed": true, "condition": "text_present", "value": "Operator Login"}
+{"event": "step", "at": "2026-08-16T14:29:01Z", "step": 2, "action": "type", "risk": "read_only", "strategy_used": "label: Operator ID", "timed_out": false, "duration_ms": 31}
+{"event": "step", "at": "2026-08-16T14:29:01Z", "step": 3, "action": "type", "risk": "read_only", "strategy_used": "label: Password", "timed_out": false, "duration_ms": 30}
+{"event": "step", "at": "2026-08-16T14:29:02Z", "step": 4, "action": "click", "risk": "read_only", "strategy_used": "label: Sign On", "timed_out": false, "duration_ms": 594}
+{"event": "checkpoint", "at": "2026-08-16T14:29:02Z", "step": 4, "passed": true, "condition": "text_present", "value": "Member Lookup"}
+{"event": "step", "at": "2026-08-16T14:29:02Z", "step": 5, "action": "type", "risk": "read_only", "strategy_used": "label: Member number", "timed_out": false, "duration_ms": 32}
+{"event": "step", "at": "2026-08-16T14:29:02Z", "step": 6, "action": "click", "risk": "read_only", "strategy_used": "label: Look Up", "timed_out": false, "duration_ms": 562}
+{"event": "checkpoint", "at": "2026-08-16T14:29:02Z", "step": 6, "passed": true, "condition": "text_present", "value": "Member Profile"}
+{"event": "step", "at": "2026-08-16T14:29:03Z", "step": 7, "action": "click", "risk": "read_only", "strategy_used": "label: Open Sub-Account", "timed_out": false, "duration_ms": 594}
+{"event": "checkpoint", "at": "2026-08-16T14:29:03Z", "step": 7, "passed": true, "condition": "url_matches", "value": "/member/23456/sub-account/new"}
+{"event": "step", "at": "2026-08-16T14:29:03Z", "step": 8, "action": "type", "risk": "read_only", "strategy_used": "label: Account type", "timed_out": false, "duration_ms": 16}
+{"event": "step", "at": "2026-08-16T14:29:03Z", "step": 9, "action": "type", "risk": "read_only", "strategy_used": "label: Account nickname", "timed_out": false, "duration_ms": 15}
+{"event": "step", "at": "2026-08-16T14:29:03Z", "step": 10, "action": "type", "risk": "read_only", "strategy_used": "label: Initial deposit", "timed_out": false, "duration_ms": 15}
+{"event": "step", "at": "2026-08-16T14:29:04Z", "step": 11, "action": "click", "risk": "mutating", "strategy_used": "label: Review", "timed_out": false, "duration_ms": 546}
+{"event": "checkpoint", "at": "2026-08-16T14:29:04Z", "step": 11, "passed": true, "condition": "text_present", "value": "Confirm Sub-Account"}
+{"event": "paused_for_human", "at": "2026-08-16T14:29:04Z", "step": 12, "reason": "IRREVERSIBLE_STEP", "detail": "Step 12 (click) is irreversible and always requires explicit human confirmation.", "when": "before_step"}
+{"event": "control_transferred", "at": "2026-08-16T14:29:04Z", "to": "HUMAN", "step": 12, "reason": "IRREVERSIBLE_STEP", "when": "before_step", "attempt": 1}
+{"event": "human_action", "at": "2026-08-16T14:29:12Z", "step": 12, "attempt": 1, "url_before": "http://127.0.0.1:5000/member/23456/sub-account/new", "url_after": "http://127.0.0.1:5000/member/23456/sub-account/confirm", "dom_before": "evidence/13_replay_handoff_operator_clicked_confirm/human_step12_1_before.html", "dom_after": "evidence/13_replay_handoff_operator_clicked_confirm/human_step12_1_after.html", "changed": true, "summary": "navigated from http://127.0.0.1:5000/member/23456/sub-account/new to http://127.0.0.1:5000/member/23456/sub-account/confirm"}
+{"event": "control_returned", "at": "2026-08-16T14:29:12Z", "to": "AUTOMATION", "step": 12, "decision": "resume", "paused_at": "2026-08-16T14:29:04Z", "control_returned_at": "2026-08-16T14:29:12Z"}
+{"event": "resuming", "at": "2026-08-16T14:29:12Z", "step": 12}
+{"event": "performed_by_human", "at": "2026-08-16T14:29:12Z", "step": 12, "action": "click", "condition": "url_matches", "value": "/member/23456/sub-account/confirm"}
+{"event": "recovered", "at": "2026-08-16T14:29:12Z", "condition": "HUMAN_PERFORMED_STEP", "step": 12, "action": "not re-sent"}
+{"event": "checkpoint", "at": "2026-08-16T14:29:12Z", "step": 12, "passed": true, "condition": "url_matches", "value": "/member/23456/sub-account/confirm"}
+{"event": "step", "at": "2026-08-16T14:29:12Z", "step": 13, "action": "read", "risk": "read_only", "strategy_used": "label: New account number", "timed_out": false, "duration_ms": 0}
+{"event": "run_finished", "at": "2026-08-16T14:29:12Z", "status": "SUCCESS", "steps_completed": 13, "recoveries": [{"condition": "HUMAN_PERFORMED_STEP", "step": 12, "action": "not re-sent"}]}

@@ -1,0 +1,29 @@
+{
+  "run_id": "run_20260816_102640",
+  "capability": "open_sub_account",
+  "capability_version": "1.0.0",
+  "mode": "replay",
+  "inputs": {
+    "member_number": "23456",
+    "account_type": "Holiday Club",
+    "account_nickname": "Vacation fund",
+    "initial_deposit": "150.00"
+  },
+  "started_at": "2026-08-16T14:26:41Z",
+  "ended_at": "2026-08-16T14:26:44Z",
+  "steps_completed": 10,
+  "steps_total": 13,
+  "llm_call_count": 0,
+  "evidence_path": "evidence/09_replay_gate_mutation_not_approved/",
+  "app_fingerprint_observed": "legacy-cu-portal@4.3.0",
+  "status": "NEEDS_INTERVENTION",
+  "payload": {
+    "reason": "MUTATION_NOT_APPROVED",
+    "detail": "Step 11 (click) changes state and this invocation carries no standing approval.",
+    "paused_at_step": 11,
+    "screenshot": "evidence/09_replay_gate_mutation_not_approved/screenshots/intervention_step11.png",
+    "session_id": "browser_sess_212d2170450",
+    "requested_action": "Approve here and the automation performs this step, or abandon and re-invoke with --approve-mutations.",
+    "control": "HUMAN"
+  }
+}

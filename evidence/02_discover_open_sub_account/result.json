@@ -1,0 +1,21 @@
+{
+  "run_id": "run_20260814_123337",
+  "capability": "open_sub_account",
+  "capability_version": "1.0.0",
+  "mode": "discovery",
+  "inputs": {},
+  "started_at": "2026-08-14T16:33:38Z",
+  "ended_at": "2026-08-14T16:34:11Z",
+  "steps_completed": 14,
+  "steps_total": 14,
+  "llm_call_count": 14,
+  "evidence_path": "evidence/02_discover_open_sub_account/",
+  "app_fingerprint_observed": "legacy-cu-portal@4.3.0",
+  "status": "SUCCESS",
+  "payload": {
+    "outputs": {
+      "new_account_number": "SA-12345-69"
+    },
+    "checkpoint_verified": true
+  }
+}

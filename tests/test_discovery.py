@@ -440,3 +440,28 @@ class TestEvidence:
         letter has no business travelling with it."""
         assert "\\" not in evidence.path
         assert evidence.path.endswith("/")
+
+    def test_a_path_inside_the_repo_is_recorded_relative_to_it(self, evidence):
+        """Screenshots and DOM snapshots are written absolute — they must be —
+        but an absolute path in a committed envelope is the author's drive layout
+        and is unopenable by the reviewer reading it."""
+        from cua.evidence import REPO_ROOT
+        inside = REPO_ROOT / "evidence" / "run_x" / "screenshots" / "step01.png"
+        assert evidence.relative(inside) == "evidence/run_x/screenshots/step01.png"
+
+    def test_a_path_outside_the_repo_keeps_its_own(self, evidence, tmp_path):
+        """Relative to a repo it does not live in would be relative to nothing the
+        reader has. Still forward-slashed: in JSON a backslash is an escape
+        character before it is a path separator."""
+        outside = evidence.relative(tmp_path / "elsewhere" / "shot.png")
+        assert "\\" not in outside
+        assert outside.endswith("elsewhere/shot.png")
+
+    def test_the_path_does_not_depend_on_where_the_command_was_run_from(
+            self, evidence, monkeypatch, tmp_path):
+        """Anchored to the repo, not to cwd — otherwise the same run recorded from
+        two directories produces two different documents."""
+        from cua.evidence import REPO_ROOT
+        target = REPO_ROOT / "evidence" / "run_x" / "result.json"
+        monkeypatch.chdir(tmp_path)
+        assert evidence.relative(target) == "evidence/run_x/result.json"

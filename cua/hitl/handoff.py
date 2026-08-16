@@ -210,10 +210,12 @@ class Handoff:
         except Exception:
             pass
         try:
-            path = Path(self.evidence.dir) / f"human_{tag}.html"
-            state["dom"] = self.surface.dom_snapshot(path)
-            state["digest"] = hashlib.sha1(
-                Path(state["dom"]).read_bytes()).hexdigest()[:12]
+            written = Path(self.surface.dom_snapshot(
+                Path(self.evidence.dir) / f"human_{tag}.html"))
+            # Hashed from where it was written, recorded from where a reader will
+            # look for it. The two are the same file and rarely the same string.
+            state["digest"] = hashlib.sha1(written.read_bytes()).hexdigest()[:12]
+            state["dom"] = self.evidence.relative(written)
         except Exception:
             # A page that cannot be serialised — closed, mid-navigation — is worth
             # noting and never worth ending a handoff over.

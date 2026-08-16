@@ -469,8 +469,7 @@ class ReplayEngine:
 
         known = self.runtime.dialogs.identify(dialog)
         if known is None:
-            screenshot = self.surface.screenshot(
-                self.evidence.screenshot_path(f"intervention_step{step['id']:02d}"))
+            screenshot = self._shot(f"intervention_step{step['id']:02d}")
             self.evidence.trace("unknown_dialog", step=step["id"], text=dialog[:200])
             return {
                 "kind": "intervention",
@@ -545,8 +544,7 @@ class ReplayEngine:
         if self._session_expired():
             if self._recover_session(step, inputs, base_url, condition, expected):
                 return None
-            screenshot = self.surface.screenshot(
-                self.evidence.screenshot_path(f"intervention_step{step['id']:02d}"))
+            screenshot = self._shot(f"intervention_step{step['id']:02d}")
             missing = "" if self.runtime.session.recoverable else \
                 " and no re-login routine is defined for this app"
             return {
@@ -566,6 +564,17 @@ class ReplayEngine:
             self.strategy_log[-1:]))
 
     # ---------------------------------------------------------- recovery --
+
+    def _shot(self, name):
+        """Capture, and hand back the path as it should be *recorded*.
+
+        Written absolute, recorded repo-relative. Every screenshot that reaches a
+        result envelope goes through here, because one that does not is an
+        absolute path in a committed document — the author's drive layout, and
+        unopenable by the person reading it.
+        """
+        return self.evidence.relative(
+            self.surface.screenshot(self.evidence.screenshot_path(name)))
 
     def _recovered(self, condition, step, **detail):
         """A recoverable condition is logged and execution continues.
@@ -671,8 +680,7 @@ class ReplayEngine:
         to justify later, and "the system said the member was out of region" is
         worth being able to show rather than assert.
         """
-        screenshot = self.surface.screenshot(
-            self.evidence.screenshot_path(f"outcome_step{step['id']:02d}"))
+        screenshot = self._shot(f"outcome_step{step['id']:02d}")
         detail = (f"After step {step['id']} ({step['action']}), the page matched "
                   f"{outcome['detect']['value']!r}. {outcome['meaning']}")
         self.evidence.trace("business_outcome", step=step["id"],
@@ -685,20 +693,18 @@ class ReplayEngine:
         every trigger funnels through — tracing it here would have recorded a
         risk gate as a pause and an unknown dialog as something else, when they
         are the same event arrived at two ways."""
-        screenshot = self.surface.screenshot(
-            self.evidence.screenshot_path(f"intervention_step{step['id']:02d}"))
         return {"kind": "intervention", "step": step, "refusal": refusal,
-                "screenshot": screenshot, "when": when}
+                "screenshot": self._shot(f"intervention_step{step['id']:02d}"),
+                "when": when}
 
     def _failure(self, step, failure):
         expected = getattr(failure, "expected", "the step to complete")
         observed = getattr(failure, "observed", str(failure))
         tried = getattr(failure, "strategies_tried", None) or self.strategy_log[-1:]
 
-        screenshot = self.surface.screenshot(
-            self.evidence.screenshot_path(f"failure_step{step['id']:02d}"))
-        dom = self.surface.dom_snapshot(
-            self.evidence.dir / f"failure_step{step['id']:02d}.html")
+        screenshot = self._shot(f"failure_step{step['id']:02d}")
+        dom = self.evidence.relative(self.surface.dom_snapshot(
+            self.evidence.dir / f"failure_step{step['id']:02d}.html"))
         self.evidence.trace("hard_failure", step=step["id"], expected=expected,
                             observed=observed, strategies_tried=tried)
         return {"kind": "failure", "step": step, "expected": expected,

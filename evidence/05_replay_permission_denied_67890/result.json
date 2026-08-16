@@ -1,0 +1,23 @@
+{
+  "run_id": "run_20260816_102301",
+  "capability": "lookup_member_balance",
+  "capability_version": "1.0.0",
+  "mode": "replay",
+  "inputs": {
+    "member_number": "67890"
+  },
+  "started_at": "2026-08-16T14:23:02Z",
+  "ended_at": "2026-08-16T14:23:04Z",
+  "steps_completed": 6,
+  "steps_total": 7,
+  "llm_call_count": 0,
+  "evidence_path": "evidence/05_replay_permission_denied_67890/",
+  "app_fingerprint_observed": "legacy-cu-portal@4.3.0",
+  "status": "BUSINESS_OUTCOME",
+  "payload": {
+    "outcome_code": "PERMISSION_DENIED",
+    "detected_at_step": 6,
+    "detail": "After step 6 (click), the page matched 'Member outside your region'. The operator's region scope excludes this member. A correct answer about access rather than a broken run — the caller may route the request to a differently-scoped operator.",
+    "evidence": "evidence/05_replay_permission_denied_67890/screenshots/outcome_step06.png"
+  }
+}

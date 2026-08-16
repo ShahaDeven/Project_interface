@@ -1,0 +1,19 @@
+{"event": "run_started", "at": "2026-08-16T14:27:39Z", "mode": "replay", "capability": "lookup_member_balance", "capability_version": "1.0.0", "inputs": {"member_number": "23456"}, "base_url": "http://127.0.0.1:5000", "approve_mutations": false}
+{"event": "step", "at": "2026-08-16T14:27:39Z", "step": 1, "action": "navigate", "risk": "read_only", "strategy_used": null, "timed_out": false, "duration_ms": 592}
+{"event": "checkpoint", "at": "2026-08-16T14:27:39Z", "step": 1, "passed": true, "condition": "text_present", "value": "Operator Login"}
+{"event": "step", "at": "2026-08-16T14:27:39Z", "step": 2, "action": "type", "risk": "read_only", "strategy_used": "label: Operator ID", "timed_out": false, "duration_ms": 62}
+{"event": "step", "at": "2026-08-16T14:27:40Z", "step": 3, "action": "type", "risk": "read_only", "strategy_used": "label: Password", "timed_out": false, "duration_ms": 30}
+{"event": "chaos_armed", "at": "2026-08-16T14:27:40Z", "mode": "dialog", "before_step": 4}
+{"event": "step", "at": "2026-08-16T14:27:40Z", "step": 4, "action": "click", "risk": "read_only", "strategy_used": "label: Sign On", "timed_out": false, "duration_ms": 578}
+{"event": "unknown_dialog", "at": "2026-08-16T14:27:40Z", "step": 4, "text": "System Notice Scheduled maintenance at 6 PM. Unsaved work in open forms will be lost."}
+{"event": "paused_for_human", "at": "2026-08-16T14:27:40Z", "step": 4, "reason": "UNEXPECTED_DIALOG", "detail": "An unrecognised dialog appeared after step 4: 'System Notice Scheduled maintenance at 6 PM. Unsaved work in open forms will be lost.'", "when": "after_step"}
+{"event": "control_transferred", "at": "2026-08-16T14:27:40Z", "to": "HUMAN", "step": 4, "reason": "UNEXPECTED_DIALOG", "when": "after_step", "attempt": 1}
+{"event": "human_action", "at": "2026-08-16T14:27:47Z", "step": 4, "attempt": 1, "url_before": "http://127.0.0.1:5000/search", "url_after": "http://127.0.0.1:5000/search?", "dom_before": "evidence/11_replay_handoff_unknown_dialog/human_step04_1_before.html", "dom_after": "evidence/11_replay_handoff_unknown_dialog/human_step04_1_after.html", "changed": true, "summary": "navigated from http://127.0.0.1:5000/search to http://127.0.0.1:5000/search?"}
+{"event": "control_returned", "at": "2026-08-16T14:27:47Z", "to": "AUTOMATION", "step": 4, "decision": "resume", "paused_at": "2026-08-16T14:27:40Z", "control_returned_at": "2026-08-16T14:27:47Z"}
+{"event": "resuming", "at": "2026-08-16T14:27:47Z", "step": 4}
+{"event": "checkpoint", "at": "2026-08-16T14:27:47Z", "step": 4, "passed": true, "condition": "text_present", "value": "Member Lookup"}
+{"event": "step", "at": "2026-08-16T14:27:47Z", "step": 5, "action": "type", "risk": "read_only", "strategy_used": "label: Member number", "timed_out": false, "duration_ms": 31}
+{"event": "step", "at": "2026-08-16T14:27:48Z", "step": 6, "action": "click", "risk": "read_only", "strategy_used": "label: Look Up", "timed_out": false, "duration_ms": 578}
+{"event": "checkpoint", "at": "2026-08-16T14:27:48Z", "step": 6, "passed": true, "condition": "text_present", "value": "Member Profile"}
+{"event": "step", "at": "2026-08-16T14:27:48Z", "step": 7, "action": "read", "risk": "read_only", "strategy_used": "label: Savings balance", "timed_out": false, "duration_ms": 0}
+{"event": "run_finished", "at": "2026-08-16T14:27:48Z", "status": "SUCCESS", "steps_completed": 7, "recoveries": []}

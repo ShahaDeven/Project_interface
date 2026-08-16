@@ -1,0 +1,23 @@
+{
+  "run_id": "run_20260816_102227",
+  "capability": "lookup_member_balance",
+  "capability_version": "1.0.0",
+  "mode": "replay",
+  "inputs": {
+    "member_number": "99999"
+  },
+  "started_at": "2026-08-16T14:22:31Z",
+  "ended_at": "2026-08-16T14:22:36Z",
+  "steps_completed": 6,
+  "steps_total": 7,
+  "llm_call_count": 0,
+  "evidence_path": "evidence/04_replay_member_not_found_99999/",
+  "app_fingerprint_observed": "legacy-cu-portal@4.3.0",
+  "status": "BUSINESS_OUTCOME",
+  "payload": {
+    "outcome_code": "MEMBER_NOT_FOUND",
+    "detected_at_step": 6,
+    "detail": "After step 6 (click), the page matched 'No member matches this number'. Legitimate result: no member holds that number. The caller decides whether to re-prompt or refer the case. Not a failure of the automation.",
+    "evidence": "evidence/04_replay_member_not_found_99999/screenshots/outcome_step06.png"
+  }
+}

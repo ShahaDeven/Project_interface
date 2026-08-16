@@ -11,6 +11,30 @@ README only tells you how to run things.
 
 ---
 
+## The demo path
+
+Three commands, start to finish. Setup is below; the target app runs on
+`http://127.0.0.1:5000`.
+
+```bash
+# 1. record a capability from a natural-language goal — a real LLM-driven run
+python -m cua discover --goal "look up member 12345 and read their savings balance" \
+  --target http://127.0.0.1:5000 --save-as lookup_member_balance
+
+# 2. replay it against a member it was never recorded against — zero model calls
+python -m cua replay lookup_member_balance --param member_number=23456
+
+# 3. the same artifact, an input that has no answer — a business outcome, not a crash
+python -m cua replay lookup_member_balance --param member_number=99999
+```
+
+**→ [`evidence/`](evidence/README.md) — thirteen recorded runs with an index.** Every
+claim in this README is a run you can open: discovery, deterministic replay, both
+business outcomes, three recovered runtime conditions, a hard failure, both risk
+gates, and three handoffs. Start there if you would rather read than run.
+
+---
+
 ## Build status
 
 | Piece | State |
@@ -22,18 +46,18 @@ README only tells you how to run things.
 | `cua/distill/` — trace → artifact | **done** |
 | `cua/policy/` — allowlist, risk classification, redaction (§8) | **done** |
 | `cua/replay/` — the interpreter (§6) | **done** |
-| `cua/hitl/` — escalation and handoff (§9) | not started |
+| `cua/hitl/` — escalation and handoff (§9) | **done** |
 
-286 tests cover what is done, and two capabilities have been recorded from real
+339 tests cover what is done, and two capabilities have been recorded from real
 LLM-driven runs.
 
-Replay is complete: input binding, the strategy fallback chain, per-step
-checkpoints, the outcome scanner, runtime-condition recovery and the risk gates.
-What remains is the far side of an escalation. Today a run that needs a human
-stops and hands back a `NEEDS_INTERVENTION` envelope naming the live browser
-session; it cannot yet pause, wait for that person, capture what they did, and
-resume. The trigger is real and the payload is real — the seam in §9 is what is
-missing.
+Every core requirement has a working path end to end: a goal, an LLM-driven run
+that completes it, a saved artifact, deterministic replay with typed outputs and
+error handling, and a human who can take over the live session and hand it back.
+What remains is the committed evidence set and [REPORT.md](REPORT.md).
+
+Gaps found along the way — including the ones that only surfaced when a human
+drove the handoff — are logged in [FOUND_GAPS.md](FOUND_GAPS.md).
 
 ---
 
@@ -186,7 +210,7 @@ python -m cua replay lookup_member_balance --param member_number=23456 --chaos s
 |---|---|---|
 | `--chaos slow` | per-attempt bound expires, re-checks (never re-sends), recovers | `SUCCESS` + `Recovered: SLOW_LOAD` |
 | `--chaos session` | runs the declared re-login routine, re-verifies, continues | `SUCCESS` + `Recovered: SESSION_EXPIRED` |
-| `--chaos dialog` | refuses to guess at an unrecognised modal | `NEEDS_INTERVENTION` |
+| `--chaos dialog` | refuses to guess at an unrecognised modal | `NEEDS_INTERVENTION`, or a handoff — see below |
 | `--chaos dialog`, modal declared in `runtime.yaml` | dismisses it, logs it, steps past | `SUCCESS` + `Recovered: KNOWN_INTERSTITIAL` |
 | `--chaos error` | no retry — a 500 is the app saying it is broken | `HARD_FAILURE` |
 
@@ -198,6 +222,58 @@ network had a bad afternoon. That is the three-class rule in DESIGN §6, and the
 
 Other flags: `--target` (default `http://127.0.0.1:5000`), `--headless`, and
 `--screenshots all` for a capture per step rather than only on failure.
+
+---
+
+## Hand off to a human
+
+Some things a run must not decide alone: an unrecognised dialog, a session that
+expired with no way back, or a step that cannot be undone. When one happens and
+there is an operator present, the run **pauses on the live browser session** — the
+same window, never a fresh one — waits, and picks up where it left off.
+
+```bash
+# stops at step 12: the irreversible confirmation
+python -m cua replay open_sub_account --param member_number=23456 \
+  --param "account_type=Holiday Club" --param "account_nickname=Vacation fund" \
+  --param initial_deposit=150.00 --approve-mutations
+
+# stops at step 4: a maintenance modal nobody declared
+python -m cua replay lookup_member_balance --param member_number=23456 --chaos dialog
+```
+
+You are told three ways, because the person is looking at the browser and not at
+the terminal: a **banner across the live page** with the decision buttons on it, a
+**rewritten tab title** (`[!] ACTION NEEDED`, which is what a minimised window
+shows), and a **block in the terminal** with a bell. Answer by clicking the banner
+or by typing at the prompt — whichever is nearer. Both stay live, because the page
+is occasionally the reason someone was called.
+
+The two pauses mean different things, and the prompt says which:
+
+| | The step | Resuming means | You should |
+|---|---|---|---|
+| **Risk gate** | has *not* run | the automation performs it | approve — don't do it yourself |
+| **Dialog / session** | already ran | the page is re-judged | fix it in the browser, then resume |
+
+Nothing is taken on trust. Resuming re-checks the page rather than the answer, so
+saying "resume" without having fixed anything gets you the same request back —
+three times, then the run stops. And a step you approved that the automation then
+can't perform, because you clicked it yourself, is detected by its checkpoint and
+**not sent a second time**.
+
+The result carries an `intervention_record`: who took over, at which step, what
+the page did while they held control, when control came back, and whether the
+checkpoint held afterwards. It appears on every terminal status, because a run
+that stopped at a gate paused for a human just as much as one that was waved on.
+
+`--no-console` refuses to pause at all and reports the intervention instead, which
+is what an unattended run does. That is also automatic when stdin is not a
+terminal — otherwise a run in CI would take an immediate EOF and report itself
+abandoned by an operator who was never there.
+
+Discovery escalates through the same path: when the agent calls `stuck`, a person
+can unblock the page and the run carries on instead of ending.
 
 ---
 
@@ -289,7 +365,7 @@ TARGET_APP_BUILD=4.4.0 python -m target_app
 ## Tests
 
 ```bash
-pytest                       # 286 tests, ~3 min
+pytest                       # 339 tests, ~3 min
 pytest -m "not browser"      # skips the ones driving real Chromium
 pytest -m "not slow"         # skips the one that waits out the real 8s delay
 ```
@@ -300,12 +376,19 @@ fallback chain against a real browser, the allowlist, risk classification,
 redaction, and the discovery loop — the last with a faked surface and model, so a
 test suite can never launch a browser or spend money on the API.
 
-Replay is tested end to end against the live app in a real browser, which is
-affordable precisely because there is no model in that path: every demo below is
-a test, including the recovered slow load, the re-login, the unknown dialog, the
-two business outcomes and both risk gates. `llm_call_count: 0` is asserted as a
-measured property of a run, and the result schema refuses any other value when
-`mode` is `replay`.
+Replay and the handoff are tested end to end against the live app in a real
+browser, which is affordable precisely because there is no model in that path:
+every demo above is a test, including the recovered slow load, the re-login, the
+unknown dialog, the two business outcomes, both risk gates, and an operator who
+approves an irreversible step. `llm_call_count: 0` is asserted as a measured
+property of a run, and the result schema refuses any other value when `mode` is
+`replay`.
+
+The handoff is testable at all because the operator console is an interface rather
+than a `print` and an `input`. A scripted console can act on the live page exactly
+as a person would — dismiss the modal, press the button — and then answer, which
+puts the resume path under test rather than under a manual check the night before
+a demo.
 
 ---
 
@@ -321,7 +404,7 @@ cua/                  the system under evaluation
   distill/            trace → artifact
   policy/             allowlist, risk classification, redaction
   replay/             the interpreter: binding, checkpoints, outcomes, recovery
-  hitl/               pause / cede control / resume (Day 4)
+  hitl/               pause / cede control / resume, and the operator console
   config.py           model, stopping conditions, {secrets.*} resolution
   evidence.py         per-run directory, trace and transcript writers
 policy.yaml           permitted origins and routes; per-step risk routes
@@ -332,23 +415,24 @@ evidence/             per-run traces, screenshots, transcripts
 tests/
 DESIGN.md             the build spec and source of truth
 REPORT.md             the design write-up
+FOUND_GAPS.md         what broke while building, and what was done about it
 ```
 
 ---
 
 ## Coming next
 
-The human-handoff seam (DESIGN §9). Every trigger into it already works —
-`--chaos dialog` produces a live `NEEDS_INTERVENTION` naming the browser session,
-and both risk gates produce one on demand — but the run currently ends there
-instead of pausing.
+In rough order of value, and argued in [REPORT.md](REPORT.md) §7:
 
-What is missing is the far side: the `RUNNING → PAUSED_FOR_HUMAN → RESUMING`
-state machine, the terminal operator prompt, capture of what the person did while
-control was theirs, re-verification of the checkpoint before control returns
-(never a blind resume), and the `intervention_record` on the final result. The
-console is deliberately mocked; the mechanism is not — the human takes over the
-same live Playwright session, which is why the session id is in the envelope
-today rather than a placeholder for one.
-
-Then the committed evidence set (DESIGN §10) and REPORT.md.
+1. **A structural drift hash.** The fingerprint check catches changes someone
+   remembered to announce. A tag-skeleton hash of the pages a capability touches
+   catches the reordered table row that breaks a locator and leaves the build
+   string untouched — turning drift from a postmortem finding into a pre-flight
+   warning.
+2. **Multi-run stability scoring.** Replay N times, report flakiness per
+   capability and per strategy tier. That number is what would let unattended
+   replay be gated on an approval state rather than on someone's judgement.
+3. **A capability catalog.** Artifacts exposed as typed, callable capabilities an
+   agent discovers by name rather than being handed a filename. The schema is
+   already the tool definition, so most of this is plumbing.
+4. **A second surface**, to find out how much of `distill/` is browser-shaped.

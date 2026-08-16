@@ -1,0 +1,23 @@
+{
+  "run_id": "run_20260816_102212",
+  "capability": "lookup_member_balance",
+  "capability_version": "1.0.0",
+  "mode": "replay",
+  "inputs": {
+    "member_number": "23456"
+  },
+  "started_at": "2026-08-16T14:22:14Z",
+  "ended_at": "2026-08-16T14:22:16Z",
+  "steps_completed": 7,
+  "steps_total": 7,
+  "llm_call_count": 0,
+  "evidence_path": "evidence/03_replay_success_23456/",
+  "app_fingerprint_observed": "legacy-cu-portal@4.3.0",
+  "status": "SUCCESS",
+  "payload": {
+    "outputs": {
+      "savings_balance": 18240.55
+    },
+    "checkpoint_verified": true
+  }
+}

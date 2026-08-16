@@ -1,0 +1,12 @@
+{"event": "run_started", "at": "2026-08-16T14:22:14Z", "mode": "replay", "capability": "lookup_member_balance", "capability_version": "1.0.0", "inputs": {"member_number": "23456"}, "base_url": "http://127.0.0.1:5000", "approve_mutations": false}
+{"event": "step", "at": "2026-08-16T14:22:14Z", "step": 1, "action": "navigate", "risk": "read_only", "strategy_used": null, "timed_out": false, "duration_ms": 609}
+{"event": "checkpoint", "at": "2026-08-16T14:22:14Z", "step": 1, "passed": true, "condition": "text_present", "value": "Operator Login"}
+{"event": "step", "at": "2026-08-16T14:22:14Z", "step": 2, "action": "type", "risk": "read_only", "strategy_used": "label: Operator ID", "timed_out": false, "duration_ms": 30}
+{"event": "step", "at": "2026-08-16T14:22:14Z", "step": 3, "action": "type", "risk": "read_only", "strategy_used": "label: Password", "timed_out": false, "duration_ms": 31}
+{"event": "step", "at": "2026-08-16T14:22:15Z", "step": 4, "action": "click", "risk": "read_only", "strategy_used": "label: Sign On", "timed_out": false, "duration_ms": 609}
+{"event": "checkpoint", "at": "2026-08-16T14:22:15Z", "step": 4, "passed": true, "condition": "text_present", "value": "Member Lookup"}
+{"event": "step", "at": "2026-08-16T14:22:15Z", "step": 5, "action": "type", "risk": "read_only", "strategy_used": "label: Member number", "timed_out": false, "duration_ms": 15}
+{"event": "step", "at": "2026-08-16T14:22:16Z", "step": 6, "action": "click", "risk": "read_only", "strategy_used": "label: Look Up", "timed_out": false, "duration_ms": 578}
+{"event": "checkpoint", "at": "2026-08-16T14:22:16Z", "step": 6, "passed": true, "condition": "text_present", "value": "Member Profile"}
+{"event": "step", "at": "2026-08-16T14:22:16Z", "step": 7, "action": "read", "risk": "read_only", "strategy_used": "label: Savings balance", "timed_out": false, "duration_ms": 16}
+{"event": "run_finished", "at": "2026-08-16T14:22:16Z", "status": "SUCCESS", "steps_completed": 7, "recoveries": []}
