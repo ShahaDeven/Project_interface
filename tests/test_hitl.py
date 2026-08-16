@@ -11,6 +11,7 @@ the `intervention_record` on the final envelope.
 """
 
 import io
+import threading
 from pathlib import Path
 
 import pytest
@@ -54,12 +55,16 @@ def request_for(**overrides):
 
 class TestTerminalConsole:
 
-    def console(self, answers, tty=True):
+    def console(self, answers, tty=True, deadline=5):
         replies = iter(answers)
         stdin = type("Stdin", (), {"isatty": lambda self: tty})()
-        return TerminalConsole(stream=io.StringIO(),
-                               input_fn=lambda _prompt: next(replies),
-                               stdin=stdin)
+        console = TerminalConsole(stream=io.StringIO(),
+                                  input_fn=lambda _prompt: next(replies),
+                                  stdin=stdin)
+        # Production waits forever for a person. A test must not: a channel that
+        # never delivers would hang the suite instead of failing it.
+        console.deadline_seconds = deadline
+        return console
 
     def test_a_pipe_is_not_an_operator(self):
         """Without this a run in CI hits input(), takes an immediate EOF, and
@@ -127,6 +132,36 @@ class TestTerminalConsole:
         occasionally the very reason someone was called."""
         console = self.console(["a"])
         assert console.ask(request_for(), watch=lambda: None) == ABANDON
+
+    def test_a_deadline_ends_the_wait_rather_than_hanging(self):
+        """Production waits indefinitely — there is no defensible number of seconds
+        after which an operator's answer stops mattering, least of all on the
+        irreversible step. A bounded wait exists so that a channel which never
+        delivers fails loudly instead of hanging whoever is running this.
+
+        The keyboard has to *block* here, the way a present-but-silent operator
+        does. An input that raises instead takes the closed-stdin path below, which
+        also returns ABANDON and would let this pass while proving nothing.
+        """
+        silent = threading.Event()
+        stdin = type("Stdin", (), {"isatty": lambda self: True})()
+        console = TerminalConsole(stream=io.StringIO(),
+                                  input_fn=lambda _prompt: silent.wait(),
+                                  stdin=stdin)
+        console.deadline_seconds = 0.5
+
+        assert console.ask(request_for(), watch=lambda: None) == ABANDON
+        assert "nobody answered" in console.stream.getvalue()
+
+    def test_stdin_closing_mid_poll_is_also_abandon(self):
+        """Nobody left to ask is a decision too, and a different one from nobody
+        answering — the reader reports the channel gone rather than staying silent."""
+        console = self.console([], deadline=30)
+        assert console.ask(request_for(), watch=lambda: None) == ABANDON
+        assert "abandoned" in console.stream.getvalue()
+
+    def test_waiting_forever_is_the_default(self):
+        assert TerminalConsole.deadline_seconds is None
 
     def test_the_prompt_says_both_channels_are_open(self):
         console = self.console([])
@@ -266,6 +301,32 @@ class TestBanner:
 
         surface.page.click('button:has-text("Approve")')
         assert surface.banner_decision() == RESUME
+
+    def test_the_poll_restores_a_banner_that_went_missing(self, surface, live_server):
+        """During a handoff the engine navigates nothing — the *operator* does — so
+        the decision poll is the only moment anything of ours looks at the page.
+        Restoring the notice has to happen there, not in navigate(), and not only in
+        a load handler that calls Playwright from inside Playwright's own event
+        dispatch. Simulated by deleting the banner outright."""
+        surface.navigate(f"{live_server}/login")
+        surface.show_banner("PAUSED", ["still needed"], choices=((RESUME, "Approve"),))
+
+        surface.page.evaluate(
+            "() => document.querySelectorAll('[data-cua-handoff]').forEach(n => n.remove())")
+        assert not surface.page.query_selector(f"[{BANNER_MARKER}]")
+
+        assert surface.banner_decision() is None, "nothing was pressed"
+        assert surface.page.query_selector(f"[{BANNER_MARKER}]"), "the poll repainted it"
+        assert surface.text_present("still needed")
+
+    def test_a_cleared_banner_is_not_repainted_by_the_poll(self, surface, live_server):
+        """The repaint is driven by the handoff being live, not by the page lacking
+        a banner. Once control is back, polling must not resurrect it."""
+        surface.navigate(f"{live_server}/login")
+        surface.show_banner("PAUSED", ["gone soon"])
+        surface.clear_banner()
+        surface.banner_decision()
+        assert not surface.page.query_selector(f"[{BANNER_MARKER}]")
 
     def test_a_stale_decision_cannot_leak_into_the_next_pause(self, surface, live_server):
         """A run pauses more than once. An answer left on the page would resume

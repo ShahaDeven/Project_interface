@@ -19,7 +19,10 @@ the live session and hands it back.**
   intervention. Successful replays capture none by default; `--screenshots all`
   changes that.
 - **`transcript.jsonl`** — *discovery only*: every model request and response,
-  verbatim. Also `artifact.json`, the capability compiled from that run.
+  verbatim. Also `artifact.json`, the capability compiled from that run. Both
+  discovery runs used **`claude-sonnet-5`**, and the model was told nothing about
+  this application — no selectors, no page list, no hints. It is handed a goal, a
+  screenshot and a numbered element list, and works the rest out.
 - **`failure_stepNN.html`** on a hard failure, and **`human_stepNN_*_before/after.html`**
   around a handoff — DOM snapshots at the moment that mattered.
 
@@ -33,7 +36,7 @@ machine's record and were deliberately left untouched.
 
 | Run | What it demonstrates | Open this | Brief |
 |---|---|---|---|
-| **01_discover_lookup_member_balance** | A real LLM-driven run against a surface the model has never seen: it works out that the portal needs signing into, finds the search field by the text beside it, reads the balance. 8 model calls. | `transcript.jsonl` — the full conversation, and every credential appears as the token `{secrets.operator_id}`, never a value. `artifact.json` is what got compiled out of it. | §3.1 |
+| **01_discover_lookup_member_balance** | A real LLM-driven run against a surface the model has never seen: it works out that the portal needs signing into, finds the search field by the text beside it, reads the balance. 8 model calls. | `transcript.jsonl` — the full conversation. The model is handed tokens, not values: it types `{secrets.operator_password}` and the **password never appears**, because a password field's value is never read during distillation. The **operator ID does appear** once typed — it is substituted the same way but reads back like any other text input. A non-secret identifier, and the boundary is deliberate: [FOUND_GAPS.md](../FOUND_GAPS.md) G-22. `artifact.json` is what got compiled out of this run. | §3.1 |
 | **02_discover_open_sub_account** | The same, for the 13-step mutating flow. 14 model calls. | `artifact.json` — step 11 is `mutating`, step 12 `irreversible`, both classified from what the browser did, not from the model. | §3.1, §3.2 |
 | **03_replay_success_23456** | The headline claim. Recorded against member `12345`, replayed against `23456`, **zero model calls**. | `result.json` — `"llm_call_count": 0` next to `"savings_balance": 18240.55` as a number, not a string. `trace.jsonl` — `strategy_used` on every step shows which tier of the fallback chain won. | §3.3 |
 | **04_replay_member_not_found_99999** | "No such member" is an answer, not a crash. | `trace.jsonl` — `business_outcome` at step 6, and **no `hard_failure` anywhere in the file**. Step 6's checkpoint "Member Profile" did *not* hold; the outcome scan runs first, which is the whole point. | §3.3 |

@@ -112,11 +112,48 @@ def live_server(app):
     thread.join(timeout=5)
 
 
+# Set when the browser binary turns out to be missing, so the run can end with an
+# instruction rather than leaving the reader to infer one from 76 skips.
+_CHROMIUM_MISSING = False
+
+INSTALL_HINT = "playwright install chromium"
+
+
 @pytest.fixture(scope="session")
 def playwright_instance():
+    """Playwright, or a clean skip when the browser was never downloaded.
+
+    `pip install -r requirements.txt` fetches the Python client; the Chromium
+    binary is a separate ~140MB download and is the one setup step a reader is
+    most likely to miss. Without this check they get dozens of Playwright stack
+    traces, none of which say what to do — and the 266 tests that need no browser
+    are buried under them.
+    """
+    global _CHROMIUM_MISSING
     from playwright.sync_api import sync_playwright
+
     with sync_playwright() as instance:
+        try:
+            installed = Path(instance.chromium.executable_path).exists()
+        except Exception:
+            # Some versions raise here rather than returning a path that is not
+            # there. Both mean the same thing.
+            installed = False
+        if not installed:
+            _CHROMIUM_MISSING = True
+            pytest.skip(f"Chromium is not installed — run: {INSTALL_HINT}")
         yield instance
+
+
+def pytest_terminal_summary(terminalreporter, exitstatus, config):
+    if not _CHROMIUM_MISSING:
+        return
+    terminalreporter.write_sep("=", "browser tests skipped", yellow=True)
+    terminalreporter.write_line(
+        f"Chromium is not installed, so the tests that drive a real browser did not "
+        f"run:\n\n    {INSTALL_HINT}\n\n"
+        f"Everything else ran. A green result here means the suite is healthy, not "
+        f"that it is complete.")
 
 
 @pytest.fixture

@@ -99,7 +99,15 @@ _CLEAR_BANNER = """
 # than a JS variable because the banner is repainted after navigation, and a
 # variable would not survive the very page change an operator is most likely to
 # cause.
-_READ_DECISION = "() => document.documentElement.getAttribute('data-cua-decision')"
+#
+# Reports whether the banner is still on the page in the same call, so the poll can
+# restore it without a second round-trip on the common path.
+_READ_DECISION = """
+() => ({
+  decision: document.documentElement.getAttribute('data-cua-decision'),
+  present: !!document.querySelector('[data-cua-handoff]'),
+})
+"""
 
 
 class TargetNotFound(Exception):
@@ -136,8 +144,10 @@ class BrowserSurface:
         self.page.set_default_timeout(timeout_ms)
         self._banner = None
         # A navigation wipes the banner, and a paused run is exactly when the human
-        # is navigating. Repainting on load keeps the notice attached to the
-        # session rather than to one document.
+        # is navigating. Repainting on load keeps the notice attached to the session
+        # rather than to one document — but only as an optimisation: `banner_decision`
+        # restores it too, and that is the path that does not depend on calling into
+        # Playwright from inside its own event dispatch.
         self.page.on("load", lambda *_: self._paint_banner())
 
     # ----------------------------------------------------------- lifecycle --
@@ -301,12 +311,26 @@ class BrowserSurface:
         self._paint_banner()
 
     def banner_decision(self):
-        """Which banner button the operator pressed, or None. Polled, not awaited:
-        the console has to stay responsive to the terminal at the same time."""
+        """Which banner button the operator pressed, or None — and keep it painted.
+
+        Polled rather than awaited, because the console has to stay responsive to
+        the terminal at the same time.
+
+        The repaint belongs here, and specifically not in `navigate()`: while
+        control is HUMAN the engine navigates nothing, the *operator* does, and
+        this poll is the only moment anything of ours looks at the page. The
+        `load` handler below is a faster path to the same result, but it calls
+        into Playwright from inside Playwright's own event dispatch, which is not
+        guaranteed to be legal across versions — so it is an optimisation and this
+        is the guarantee. Worst case the notice is missing for 250ms.
+        """
         try:
-            return self.page.evaluate(_READ_DECISION)
+            state = self.page.evaluate(_READ_DECISION)
         except Exception:
             return None
+        if self._banner and not state["present"]:
+            self._paint_banner()
+        return state["decision"]
 
     def clear_banner(self):
         """Take it down and restore the page's own title.

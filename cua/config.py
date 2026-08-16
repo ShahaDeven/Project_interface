@@ -85,6 +85,19 @@ def secret(name):
     return value
 
 
+def missing_secrets(names):
+    """Which of these declared secrets are not configured. Named, never valued.
+
+    Lets a run refuse in milliseconds instead of discovering the gap at the
+    keystroke, three steps and one browser launch later. A capability declares
+    what it needs in `requires_secrets` precisely so this can be checked before
+    anything is opened or spent.
+    """
+    load_env()
+    return [name for name in names
+            if not os.environ.get(SECRET_ENV_PREFIX + name.upper())]
+
+
 def resolve_secrets(text):
     """Substitute {secrets.*} tokens. Called at the keystroke, nowhere earlier."""
     return SECRET_TOKEN_RE.sub(lambda match: secret(match.group(1)), text or "")

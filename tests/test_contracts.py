@@ -389,7 +389,7 @@ class TestValidateCommand:
         if that order ever inverted."""
         from cua.__main__ import main
         code = main(["replay", "lookup_member_balance", "--param", "member_id=23456"])
-        assert code == 1
+        assert code == 2, "2 is 'the run never started', distinct from 'it ran and failed'"
         error = capsys.readouterr().err
         assert "unknown parameter(s) ['member_id']" in error
         assert "member_number" in error, "should name what the capability does declare"
@@ -399,12 +399,12 @@ class TestValidateCommand:
         from cua.__main__ import main
         code = main(["discover", "--goal", "x", "--target", "https://example.com",
                      "--save-as", "thing"])
-        assert code == 1
+        assert code == 2
         assert "not in the allowlist" in capsys.readouterr().err
 
     def test_discover_refuses_a_bad_capability_name(self, capsys):
         from cua.__main__ import main
         code = main(["discover", "--goal", "x", "--target", "http://127.0.0.1:5000",
                      "--save-as", "Not Snake Case"])
-        assert code == 1
+        assert code == 2
         assert "snake_case" in capsys.readouterr().err

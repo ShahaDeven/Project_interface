@@ -529,25 +529,62 @@ re-check", separate from `verified`, in both the schema and DESIGN §7.
 
 ---
 
+### G-22 — Substitution protects a secret at the keystroke, not afterwards
+**Class:** `design` · **Found:** reading the committed transcript before submission
+
+§8's redaction story is that the model is handed the token
+`{secrets.operator_password}` and the executor substitutes the real value at the
+keystroke, so the credential is *absent* from the transcript rather than scrubbed
+from it. That holds for the password and, as written, was claimed for both secrets.
+
+It is only true for the password, and for a reason that has nothing to do with
+substitution: a password field's value is never read during element distillation,
+so it never enters our process at all. The operator ID is typed into an ordinary
+textbox, and the next observation reads that box back like any other text input —
+so `textbox 'Operator ID' = 'e.okafor'` appears twice in each committed discovery
+transcript, while the password appears zero times.
+
+Why it matters beyond the wording: substitution reads like a *general* mechanism
+for keeping secrets out of the model's context, and it is not. It protects the
+value on the way in. Anything typed into a control whose value can be read is back
+in the observation on the next turn, and therefore back in the model's context and
+the transcript. The real boundary is the **control type**, which the executor
+enforces structurally — not the token, which only defers the exposure by one turn.
+
+The fix is small and known: have the executor keep the set of values it has
+substituted this run and mask them out of element-list text before an observation
+is built, so any substituted secret is protected for the whole run rather than for
+one keystroke.
+
+**Resolution:** documented, not fixed. Masking changes what the model observes, so
+it needs a fresh discovery run to be trusted — and re-recording discovery would
+produce different artifacts and invalidate the entire frozen evidence set, which is
+a worse trade at this point than an accurate sentence. The claim is now stated
+precisely in README, `evidence/README.md` and REPORT §6 rather than absolutely.
+
+---
+
 ## Still open
 
 Known and deliberately not addressed yet.
 
 ### O-01 — A declared build can't detect undeclared drift
-**Blocks:** nothing · **Planned:** Day 2, with the executor
+**Blocks:** nothing · **Status:** deliberately unbuilt — argued as the top next step
+in [REPORT.md](REPORT.md) §7
 
 `app_fingerprint` is scraped from the app's self-reported build
-(`legacy-cu-portal@4.2.1`). That catches changes someone *remembered to announce*. A
+(`legacy-cu-portal@4.3.0`). That catches changes someone *remembered to announce*. A
 reordered `<tr>`, a renamed cell, a moved form field — all of which break recorded
-locators — leave the build string untouched.
+locators — leave the build string untouched, and replay finds out by failing.
 
 The complement is a structural hash computed by the executor from observed DOM: the
 tag skeleton of the pages a capability touches, text stripped out. Declared version
 carries the human-readable story; the hash does the actual detecting.
 
-### O-02 — No `python -m cua target_app serve` yet
-**Closed** on Day 2 with the CLI. Both forms work; `python -m target_app` remains the
-shorter one and is what the README leads with.
+The reason it kept losing is defensible: the strategy chain is what actually copes
+with a moved element, and a failed step already names what it tried and where it
+stopped. The hash would improve *when* you learn about drift, not *whether* — worth
+real money in production, and worth less than the handoff inside a time box.
 
 ### O-03 — Is the pause record forensics, or a resume token?
 **Blocks:** nothing · **Raised:** Day 4, before 4a · **Undecided**

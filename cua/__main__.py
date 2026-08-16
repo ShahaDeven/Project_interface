@@ -3,6 +3,14 @@
 Every subcommand validates in cost order: parameters, then policy, then a browser,
 then a model. A mistake at the command line should cost milliseconds, not a browser
 launch and a billed call.
+
+Exit codes say which half went wrong, because a caller scripting around this needs
+to tell them apart:
+
+    0  the run completed — SUCCESS, or a BUSINESS_OUTCOME, which is an answer
+    1  the run happened and did not finish — HARD_FAILURE, NEEDS_INTERVENTION
+    2  the run never started — bad parameters, an off-allowlist target, an unknown
+       capability, no browser installed. Nothing was touched and nothing was spent.
 """
 
 import argparse
@@ -15,6 +23,34 @@ from . import __version__
 from .contracts import ContractError, load_artifact, validate_result
 
 ROOT = Path(__file__).resolve().parents[1]
+
+INSTALL_HINT = "playwright install chromium"
+
+
+class BrowserMissing(Exception):
+    """The Playwright client is installed; the browser binary is not."""
+
+
+def open_browser(playwright, headless):
+    """Launch Chromium, or say what is missing instead of raising a stack trace.
+
+    The separate browser download is the one setup step a reader is most likely to
+    skip, and Playwright's own error is long and does not lead with the fix. Every
+    other startup problem in this CLI — an off-allowlist target, a bad parameter, a
+    malformed capability — exits with a sentence, so this one should too.
+    """
+    from .executor import BrowserSurface
+    try:
+        return BrowserSurface(playwright, headless=headless)
+    except Exception as error:
+        text = str(error)
+        if "Executable doesn't exist" in text or "playwright install" in text:
+            raise BrowserMissing(
+                f"Chromium is not installed. `pip install` fetches the Python "
+                f"client; the browser is a separate ~140MB download:\n\n"
+                f"    {INSTALL_HINT}") from None
+        raise
+
 
 def cmd_target_app(args):
     if args.action == "serve":
@@ -56,7 +92,6 @@ def cmd_discover(args):
     from . import config
     from .agent import DiscoveryLoop
     from .evidence import RunEvidence
-    from .executor import BrowserSurface
     from .hitl import TerminalConsole
     from .policy import Allowlist, PolicyViolation
 
@@ -67,11 +102,11 @@ def cmd_discover(args):
         Allowlist.from_file().check_origin(args.target)
     except PolicyViolation as violation:
         print(f"Refusing to start: {violation}", file=sys.stderr)
-        return 1
+        return 2
     if not re.match(r"^[a-z][a-z0-9_]*$", args.save_as):
         print(f"Refusing to start: --save-as '{args.save_as}' is not snake_case; "
               f"it becomes the capability name in the artifact contract.", file=sys.stderr)
-        return 1
+        return 2
 
     client = Anthropic(api_key=config.api_key())
     evidence = RunEvidence()
@@ -79,7 +114,11 @@ def cmd_discover(args):
     print(f"Goal: {args.goal}")
 
     with sync_playwright() as playwright:
-        surface = BrowserSurface(playwright, headless=args.headless)
+        try:
+            surface = open_browser(playwright, args.headless)
+        except BrowserMissing as missing:
+            print(f"Cannot start: {missing}", file=sys.stderr)
+            return 2
         try:
             # `stuck` is §9's discovery trigger: with an operator present the run
             # can be unblocked and continue instead of ending there.
@@ -87,6 +126,11 @@ def cmd_discover(args):
                                  capability_name=args.save_as,
                                  console=TerminalConsole())
             result = loop.run(args.goal, args.target)
+        except config.MissingCredential as error:
+            # Discovery cannot declare its secrets up front — it is discovering
+            # them — so this one is caught rather than pre-flighted.
+            print(f"\nCannot continue: {error}", file=sys.stderr)
+            return 2
         finally:
             surface.close()
 
@@ -153,7 +197,6 @@ def cmd_replay(args):
     from playwright.sync_api import sync_playwright
 
     from .evidence import RunEvidence
-    from .executor import BrowserSurface
     from .hitl import TerminalConsole
     from .policy import Allowlist, PolicyViolation
     from .replay import InputError, ReplayEngine, RuntimeConfig, bind_inputs, parse_params
@@ -161,22 +204,35 @@ def cmd_replay(args):
     path = ROOT / "capabilities" / f"{args.capability}.json"
     if not path.exists():
         print(f"No capability named '{args.capability}' in capabilities/", file=sys.stderr)
-        return 1
+        return 2
 
     try:
         artifact = load_artifact(path)
     except ContractError as error:
         print(f"{path} is not a valid capability:\n{error}", file=sys.stderr)
-        return 1
+        return 2
 
-    # Cost order again: parameters, then policy, then a browser.
+    # Cost order again: parameters, then policy, then credentials, then a browser.
     try:
         params = parse_params(args.param)
         inputs = bind_inputs(artifact, params)
         Allowlist.from_file().check_origin(args.target)
     except (InputError, PolicyViolation) as error:
         print(f"Refusing to start: {error}", file=sys.stderr)
-        return 1
+        return 2
+
+    # Checked here rather than at the keystroke that needs it: the capability
+    # declares what it requires, so an unconfigured credential can cost
+    # milliseconds instead of a browser launch and three completed steps.
+    from . import config
+    absent = config.missing_secrets(artifact["capability"].get("requires_secrets", []))
+    if absent:
+        listed = " and ".join(filter(None, [", ".join(absent[:-1]), absent[-1]]))
+        print(f"Refusing to start: this capability needs {listed}, which "
+              f"{'is' if len(absent) == 1 else 'are'} not configured.\n"
+              f"Copy .env.example to .env — the operator credentials in it work as "
+              f"they are, and no API key is needed to replay.", file=sys.stderr)
+        return 2
 
     app = artifact["capability"]["recorded_against"]["app"]
     runtime = RuntimeConfig.load(app)
@@ -201,7 +257,11 @@ def cmd_replay(args):
     print(f"Inputs: {inputs}")
 
     with sync_playwright() as playwright:
-        surface = BrowserSurface(playwright, headless=args.headless)
+        try:
+            surface = open_browser(playwright, args.headless)
+        except BrowserMissing as missing:
+            print(f"Cannot start: {missing}", file=sys.stderr)
+            return 2
         try:
             engine = ReplayEngine(surface, artifact, evidence=evidence, runtime=runtime,
                                   approve_mutations=args.approve_mutations,

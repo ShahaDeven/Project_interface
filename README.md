@@ -11,21 +11,66 @@ README only tells you how to run things.
 
 ---
 
-## The demo path
+## Quick start
 
-Three commands, start to finish. Setup is below; the target app runs on
-`http://127.0.0.1:5000`.
+Everything below runs offline against a local app. **No API key is needed** to see
+the system work — two capabilities are already recorded and committed, and replay
+makes no model calls.
 
 ```bash
-# 1. record a capability from a natural-language goal — a real LLM-driven run
+git clone <this repo> && cd Project_interface
+
+python -m venv .venv
+.venv\Scripts\activate            # Windows
+source .venv/bin/activate         # macOS / Linux
+
+pip install -r requirements.txt
+playwright install chromium       # separate ~140MB download; nothing runs without it
+
+cp .env.example .env              # Windows: copy .env.example .env
+```
+
+`.env.example` works **as it is** for replay — the operator credentials in it are
+fabricated and the target app accepts anything. Only discovery needs a real
+`ANTHROPIC_API_KEY`.
+
+Now two terminals. **Leave the first one running:**
+
+```bash
+# terminal 1 — the fake credit union portal, on http://127.0.0.1:5000
+python -m target_app
+```
+
+```bash
+# terminal 2 — replay a committed capability against a member it never saw
+python -m cua replay lookup_member_balance --param member_number=23456
+```
+
+```
+Status: SUCCESS  (7/7 steps, llm_call_count=0)
+Outputs:
+  savings_balance = 18240.55  (float)
+```
+
+That is the whole claim in one command: recorded against member `12345`, run
+against `23456`, zero model calls. Then the same artifact with an input that has no
+answer:
+
+```bash
+python -m cua replay lookup_member_balance --param member_number=99999
+#  BUSINESS_OUTCOME  MEMBER_NOT_FOUND — an answer the caller branches on, exit 0
+```
+
+### Recording one yourself
+
+This is the only step that calls a model and costs money. Put a real key in `.env`
+first; skip it entirely if you would rather not — the two committed capabilities
+were produced by exactly this command, and their full model transcripts are in
+[`evidence/`](evidence/README.md).
+
+```bash
 python -m cua discover --goal "look up member 12345 and read their savings balance" \
   --target http://127.0.0.1:5000 --save-as lookup_member_balance
-
-# 2. replay it against a member it was never recorded against — zero model calls
-python -m cua replay lookup_member_balance --param member_number=23456
-
-# 3. the same artifact, an input that has no answer — a business outcome, not a crash
-python -m cua replay lookup_member_balance --param member_number=99999
 ```
 
 **→ [`evidence/`](evidence/README.md) — thirteen recorded runs with an index.** Every
@@ -35,77 +80,96 @@ gates, and three handoffs. Start there if you would rather read than run.
 
 ---
 
-## Build status
-
-| Piece | State |
-|---|---|
-| `target_app/` — the fake operator portal (DESIGN §2) | **done** |
-| `cua/contracts/` — artifact + result JSON Schemas (§5, §7) | **done** |
-| `cua/executor/` — perception, actions, allowlist (§3, §8) | **done** |
-| `cua/agent/` — discovery loop, six tools (§4) | **done** |
-| `cua/distill/` — trace → artifact | **done** |
-| `cua/policy/` — allowlist, risk classification, redaction (§8) | **done** |
-| `cua/replay/` — the interpreter (§6) | **done** |
-| `cua/hitl/` — escalation and handoff (§9) | **done** |
-
-339 tests cover what is done, and two capabilities have been recorded from real
-LLM-driven runs.
-
-Every core requirement has a working path end to end: a goal, an LLM-driven run
-that completes it, a saved artifact, deterministic replay with typed outputs and
-error handling, and a human who can take over the live session and hand it back.
-What remains is the committed evidence set and [REPORT.md](REPORT.md).
-
-Gaps found along the way — including the ones that only surfaced when a human
+347 tests cover the system, and two capabilities were recorded from real LLM-driven
+runs. Gaps found while building — including the two that only surfaced when a human
 drove the handoff — are logged in [FOUND_GAPS.md](FOUND_GAPS.md).
 
 ---
 
-## Requirements
+## Setup, in more detail
 
-- **Python 3.11+**
-- A browser binary for Playwright (one extra command, see below) — needed from Day 2.
+**Python 3.11+.** Everything else is in `requirements.txt`, except the browser.
 
-## Setup
+**Why `playwright install chromium` is a separate command.** `pip install
+playwright` fetches only the Python client. The Chromium binary is a ~140MB
+download that lands in a user cache outside `site-packages`, so it cannot go in
+`requirements.txt` — pip resolves packages, and a browser is not one. Skip it and
+nothing breaks confusingly: browser tests are *skipped* with that command in the
+message, the other 269 still run, and the CLI exits 2 saying the same thing rather
+than raising a Playwright stack trace.
 
-```bash
-python -m venv .venv
-
-# Windows
-.venv\Scripts\activate
-# macOS / Linux
-source .venv/bin/activate
-
-pip install -r requirements.txt
-playwright install chromium        # separate download; nothing runs without it
-```
-
-`pip install playwright` only fetches the Python client. The Chromium binary is a
-separate ~140MB download, which is what `playwright install chromium` fetches.
-
-### Credentials
-
-Copy `.env.example` to `.env` (gitignored) and fill it in:
+**What `.env` holds.** Copy `.env.example` to `.env` (gitignored); the values in it
+already work.
 
 ```
-ANTHROPIC_API_KEY=sk-ant-...
+ANTHROPIC_API_KEY=sk-ant-...          # discovery only — replay never reads it
 CUA_SECRET_OPERATOR_ID=e.okafor
 CUA_SECRET_OPERATOR_PASSWORD=not-a-real-password
 ```
 
-The key is needed for **discovery only** — replay makes no model calls. The two
-`CUA_SECRET_*` values are the operator credentials a capability declares in
-`requires_secrets`. The model never receives them: it types the token
-`{secrets.operator_id}` and the executor substitutes the value at the keystroke, so
-the credential never enters a transcript, a trace, or an artifact. The target app
-accepts anything; these exist so the mechanism is real rather than mocked.
+The two `CUA_SECRET_*` values are the operator credentials a capability declares in
+`requires_secrets`, and replay does need them — a capability that lists a secret
+refuses to start without it, in milliseconds, before a browser opens. The model is
+never handed either one: it types the token `{secrets.operator_id}` and the
+executor substitutes the value at the keystroke.
+
+**What that protects, precisely.** The **password never enters a transcript, trace
+or artifact**, because a password field's value is never read during element
+distillation — it does not exist in our process to leak. The **operator ID is
+substituted the same way but is read back like any other text input**, so once
+typed it does appear in the discovery transcript's observations of the page. That
+is a non-secret identifier and the exposure is accepted, but the boundary is worth
+stating plainly: a value that must not appear on screen belongs in a
+password-typed control, which is the one thing the executor enforces structurally.
+Substitution protects a secret at the keystroke, not afterwards — see
+[FOUND_GAPS.md](FOUND_GAPS.md) G-22.
+
+The target app accepts anything; these exist so the mechanism is real rather than
+mocked.
+
+---
+
+## Run the target app
+
+```bash
+python -m target_app          # or: python -m cua target_app serve
+```
+
+Serves **http://127.0.0.1:5000**. Ctrl+C to stop. Every command below needs it
+running.
+
+It is a deliberately hostile 2003-era credit union operator portal: nested-table
+layout, no `id` attributes, no `data-*` hooks, no semantic HTML5, generic class
+names reused for unrelated things, form fields identified only by adjacent `<td>`
+text, and loan details buried in an unnamed `<iframe>`. That is the point — it is
+the surface the automation has to cope with. It is a prop, and it is evaluated on
+nothing.
+
+**Sign in with any username and password.** The operator is hardcoded as
+*E. Okafor*, region **Eastern**.
+
+### Members worth trying
+
+Behaviour is a pure function of the member number, so evidence runs reproduce
+exactly.
+
+| Number | What happens | Why it exists |
+|---|---|---|
+| `12345` | Alice Torres, `$4,523.18` | the flow gets recorded against this one |
+| `23456` | Marcus Bell, `$18,240.55` | replayed with — deliberately *not* the recorded one |
+| `67890` | "Member outside your region" | Western member → `PERMISSION_DENIED` |
+| `99999` | "No member matches this number" | → `MEMBER_NOT_FOUND` |
+
+Ten members are seeded. `10000–49999` are Eastern (reachable), `50000–89999` are
+Western (denied). All member data is fabricated — there is no real PII anywhere in
+this repo.
 
 ---
 
 ## Record a capability
 
-With the target app running (see below), this is a genuine LLM-driven run — the
-model has never seen this app and is told nothing about it:
+With the target app running, this is a genuine LLM-driven run — the model has never
+seen this app and is told nothing about it:
 
 ```bash
 python -m cua discover \
@@ -162,8 +226,10 @@ ending is the point:
 
 Both outcomes exit **0**. They are answers a caller branches on, not failures —
 member `99999`'s run detects the outcome at step 6, the very step whose
-checkpoint fails, and reports the answer instead of the crash. Only
-`HARD_FAILURE` and `NEEDS_INTERVENTION` exit 1.
+checkpoint fails, and reports the answer instead of the crash. `HARD_FAILURE` and
+`NEEDS_INTERVENTION` exit 1; exit **2** means the run never started, so the
+environment is wrong rather than the flow — a missing browser, an off-allowlist
+target, a parameter that fails its pattern.
 
 Everything that can fail cheaply fails before the browser opens. A bad member
 number costs milliseconds:
@@ -296,38 +362,10 @@ problem is reported at once rather than one per run.
 
 ---
 
-## Run the target app
+## Inside the target app
 
-```bash
-python -m target_app          # or: python -m cua target_app serve
-```
-
-Serves **http://127.0.0.1:5000**. Ctrl+C to stop.
-
-It is a deliberately hostile 2003-era credit union operator portal: nested-table
-layout, no `id` attributes, no `data-*` hooks, no semantic HTML5, generic class names
-reused for unrelated things, form fields identified only by adjacent `<td>` text, and
-loan details buried in an unnamed `<iframe>`. That is the point — it is the surface
-the automation has to cope with. It is a prop, and it is evaluated on nothing.
-
-**Sign in with any username and password.** The operator is hardcoded as
-*E. Okafor*, region **Eastern**.
-
-### Members worth trying
-
-Behaviour is a pure function of the member number, so evidence runs reproduce
-exactly.
-
-| Number | What happens | Why it exists |
-|---|---|---|
-| `12345` | Alice Torres, `$4,523.18` | the flow gets recorded against this one |
-| `23456` | Marcus Bell, `$18,240.55` | replayed with — deliberately *not* the recorded one |
-| `67890` | "Member outside your region" | Western member → `PERMISSION_DENIED` |
-| `99999` | "No member matches this number" | → `MEMBER_NOT_FOUND` |
-
-Ten members are seeded. `10000–49999` are Eastern (reachable), `50000–89999` are
-Western (denied). All member data is fabricated — there is no real PII anywhere in
-this repo.
+Reference for the sections above: how to provoke each condition by hand, and how
+the app reports what it is.
 
 ### Chaos flags
 
@@ -365,10 +403,17 @@ TARGET_APP_BUILD=4.4.0 python -m target_app
 ## Tests
 
 ```bash
-pytest                       # 339 tests, ~3 min
-pytest -m "not browser"      # skips the ones driving real Chromium
+pytest                       # 347 tests, ~4 min
+pytest -m "not browser"      # 269 tests, ~12s — no Chromium, no API key
 pytest -m "not slow"         # skips the one that waits out the real 8s delay
 ```
+
+**Run it sequentially.** `pytest -n auto` will produce failures that look like
+engine bugs and are not: the target app keeps opened sub-accounts in module-level
+state behind a single session-scoped server, and each chaos flag is armed once per
+session and consumed by the next page load. Parallel workers share both and trample
+each other. The suite is ~4 minutes as it is, which is cheaper than the afternoon
+that misdiagnosis costs.
 
 They cover the target app's determinism rules and hostile-markup guarantees, the
 two contracts and their referential integrity, element distillation and the strategy

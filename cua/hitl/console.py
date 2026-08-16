@@ -110,6 +110,16 @@ class TerminalConsole:
 
     poll_seconds = 0.25
 
+    # Wait indefinitely by default: a paused run is waiting on a person, and there
+    # is no defensible number of seconds after which their answer stops mattering —
+    # least of all on the irreversible step, where giving up would mean abandoning a
+    # half-finished mutation to save a process.
+    #
+    # Tests set it. A poll loop with no ceiling turns a channel that never delivers
+    # into a *hang* rather than a failure, and a hung suite is worse than a red one:
+    # no output, no traceback, indistinguishable from a slow browser test.
+    deadline_seconds = None
+
     def __init__(self, stream=None, input_fn=None, stdin=None):
         self.stream = stream if stream is not None else sys.stdout
         self._input = input_fn or input
@@ -179,8 +189,15 @@ class TerminalConsole:
         make the second handoff of a run read the first one's leftovers.
         """
         self._write("waiting (or use the buttons on the page) > ")
+        started = time.monotonic()
         while True:
             try:
+                if (self.deadline_seconds is not None
+                        and time.monotonic() - started > self.deadline_seconds):
+                    self._write(f"\n  nobody answered within {self.deadline_seconds}s "
+                                f"— abandoned.\n")
+                    return ABANDON
+
                 decision = watch()
                 if decision in (RESUME, ABANDON):
                     self._write(f"\n  {decision} — chosen on the page.\n")
