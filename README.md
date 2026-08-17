@@ -6,6 +6,8 @@ a deterministic interpreter with **zero LLM calls** — new inputs, same flow.
 
 Discovery is a compiler. Replay is a VM. The artifact is the bytecode.
 
+**▶ [3-minute demo](https://drive.google.com/file/d/1eIgNsWc4lbPqOccaTLGtm96-e7MSX5na/view?usp=sharing)** — a deterministic replay against a member it never saw, a business outcome, and a human taking over a live run to approve an irreversible step.
+
 See [DESIGN.md](DESIGN.md) for the full spec — it is the source of truth, and this
 README only tells you how to run things.
 
@@ -18,7 +20,7 @@ the system work — two capabilities are already recorded and committed, and rep
 makes no model calls.
 
 ```bash
-git clone <this repo> && cd Project_interface
+git clone https://github.com/ShahaDeven/Project_interface.git && cd Project_interface
 
 python -m venv .venv
 .venv\Scripts\activate            # Windows
