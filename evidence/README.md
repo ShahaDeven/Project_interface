@@ -8,6 +8,10 @@ The through-line: **a goal → an LLM-driven run that completes it → a saved a
 deterministic replay with new inputs, outcomes and errors → a human who takes over
 the live session and hands it back.**
 
+**▶ [Watch the demo](https://drive.google.com/file/d/1eIgNsWc4lbPqOccaTLGtm96-e7MSX5na/view?usp=sharing)** —
+discovery, a deterministic replay against a member it never saw, a business outcome,
+and a human taking over a live run to approve an irreversible step.
+
 ## What is in a run directory
 
 - **`trace.jsonl`** — one JSON object per event, append-only: every step with the

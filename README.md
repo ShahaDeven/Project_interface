@@ -69,8 +69,7 @@ were produced by exactly this command, and their full model transcripts are in
 [`evidence/`](evidence/README.md).
 
 ```bash
-python -m cua discover --goal "look up member 12345 and read their savings balance" \
-  --target http://127.0.0.1:5000 --save-as lookup_member_balance
+python -m cua discover --goal "look up member 12345 and read their savings balance" --target http://127.0.0.1:5000 --save-as lookup_member_balance
 ```
 
 **→ [`evidence/`](evidence/README.md) — thirteen recorded runs with an index.** Every
@@ -172,9 +171,7 @@ With the target app running, this is a genuine LLM-driven run — the model has 
 seen this app and is told nothing about it:
 
 ```bash
-python -m cua discover \
-  --goal "look up member 12345 and read their savings balance" \
-  --target http://127.0.0.1:5000 --save-as lookup_member_balance
+python -m cua discover --goal "look up member 12345 and read their savings balance" --target http://127.0.0.1:5000 --save-as lookup_member_balance
 ```
 
 It opens a visible browser (add `--headless` to suppress), works out that the portal
@@ -243,9 +240,7 @@ python -m cua replay lookup_member_balance --param member_number=abc
 ### Mutations and the risk gate
 
 ```bash
-python -m cua replay open_sub_account --param member_number=23456 \
-  --param account_type="Holiday Club" --param account_nickname="Vacation fund" \
-  --param initial_deposit=150.00 --approve-mutations
+python -m cua replay open_sub_account --param member_number=23456 --param account_type="Holiday Club" --param account_nickname="Vacation fund" --param initial_deposit=150.00 --approve-mutations
 ```
 
 Thirteen steps, of which exactly one is `mutating` (step 11, "Proceed to review")
@@ -300,9 +295,7 @@ same window, never a fresh one — waits, and picks up where it left off.
 
 ```bash
 # stops at step 12: the irreversible confirmation
-python -m cua replay open_sub_account --param member_number=23456 \
-  --param "account_type=Holiday Club" --param "account_nickname=Vacation fund" \
-  --param initial_deposit=150.00 --approve-mutations
+python -m cua replay open_sub_account --param member_number=23456 --param "account_type=Holiday Club" --param "account_nickname=Vacation fund" --param initial_deposit=150.00 --approve-mutations
 
 # stops at step 4: a maintenance modal nobody declared
 python -m cua replay lookup_member_balance --param member_number=23456 --chaos dialog
